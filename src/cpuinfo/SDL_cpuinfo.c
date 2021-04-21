@@ -555,6 +555,8 @@ static __inline__ int CPU_haveNEON(void)
 		}
 		return 0;
 	}
+#elif defined(__VITA__)
+	return 1;
 #else
 #warning SDL_HasNEON is not implemented for this ARM platform. Write me.
 	return 0;

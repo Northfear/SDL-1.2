@@ -1,0 +1,55 @@
+# Makefile to build the SDL library
+
+INCLUDE = -I./include
+CFLAGS  = -Ofast -mcpu=cortex-a9 -mfpu=neon -fgraphite-identity -floop-nest-optimize -flto=jobserver -ffat-lto-objects \
+$(INCLUDE) -lSceLibc_stub -Werror \
+-Dmemcpy=sceClibMemcpy -Dmemset=sceClibMemset -Dmemmove=sceClibMemmove -Dmemcmp=sceClibMemcmp
+
+CC	= arm-dolce-eabi-gcc
+AR	= arm-dolce-eabi-gcc-ar
+RANLIB	= arm-dolce-eabi-gcc-ranlib
+
+CONFIG_H = include/SDL_config.h
+TARGET  = libSDL.a
+SOURCES = \
+	src/*.c \
+	src/audio/*.c \
+	src/cdrom/*.c \
+	src/cpuinfo/*.c \
+	src/events/*.c \
+	src/file/*.c \
+	src/joystick/*.c \
+	src/stdlib/*.c \
+	src/thread/*.c \
+	src/timer/*.c \
+	src/video/*.c \
+	src/audio/vita/*.c \
+	src/video/vita/*.c \
+	src/joystick/vita/*.c \
+	src/cdrom/dummy/*.c \
+	src/thread/vita/*.c \
+	src/timer/vita/*.c \
+	src/loadso/dummy/*.c \
+	src/video/arm/*.S \
+
+OBJECTS = $(shell echo $(SOURCES) | sed -e 's,\.c,\.o,g; s,\.S,\.o,g')
+
+$(TARGET): $(CONFIG_H) $(OBJECTS)
+	$(AR) crv $@ $^
+	$(RANLIB) $@
+
+$(CONFIG_H):
+	cp $(CONFIG_H).default $(CONFIG_H)
+
+clean:
+	rm -f $(TARGET) $(OBJECTS)
+	rm $(CONFIG_H)
+
+install: $(TARGET)
+	@mkdir -p "$(DESTDIR)$(DOLCESDK)/arm-dolce-eabi/lib"
+	@cp  $(TARGET) $(DESTDIR)$(DOLCESDK)/arm-dolce-eabi/lib
+	@mkdir -p "$(DESTDIR)$(DOLCESDK)/arm-dolce-eabi/include/SDL"
+	@cp include/*.h "$(DESTDIR)$(DOLCESDK)/arm-dolce-eabi/include/SDL"
+	@echo "Installed!"
+
+.PHONY: clean install $(CONFIG_H)
