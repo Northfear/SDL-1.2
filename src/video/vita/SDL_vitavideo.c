@@ -246,6 +246,12 @@ SDL_Surface *VITA_SetVideoMode(_THIS, SDL_Surface *current,
 		(float)current->hwdata->dst.w/(float)current->w,
 		(float)current->hwdata->dst.h/(float)current->h);
 
+	// non-fullscreen screen surfaces require clear by default
+	if (width != SCREEN_W || height != SCREEN_H)
+		clear_required = 1;
+	else
+		clear_required = 0;
+
 	return(current);
 }
 

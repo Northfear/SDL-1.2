@@ -34,7 +34,6 @@
 #include "SDL_render_vita_gxm_memory.h"
 #include "SDL_render_vita_gxm_shaders.h"
 
-int message_box_active = 0;
 VITA_GXM_RenderData *data;
 static SceKernelMemBlockType textureMemBlockType = SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW;
 
@@ -221,12 +220,7 @@ int gxm_init()
             &data->displayBufferUid[i]);
 
         // memset the buffer to black
-        for (y = 0; y < VITA_GXM_SCREEN_HEIGHT; y++) {
-            unsigned int *row = (unsigned int *)data->displayBufferData[i] + y * VITA_GXM_SCREEN_STRIDE;
-            for (x = 0; x < VITA_GXM_SCREEN_WIDTH; x++) {
-                row[x] = 0xff000000;
-            }
-        }
+        SDL_memset(data->displayBufferData[i], 0, VITA_GXM_SCREEN_HEIGHT * VITA_GXM_SCREEN_STRIDE * 4);
 
         // initialize a color surface for this display buffer
         err = sceGxmColorSurfaceInit(
@@ -836,12 +830,6 @@ void gxm_set_vblank_wait(int enable)
 
 void gxm_render_clear()
 {
-    // can cause flickering with opened dialogs in some cases. sceGxmFinish can fix it too I guess
-    if (!message_box_active)
-    {
-        SDL_memset(data->displayBufferData[data->backBufferIndex], 0x0, VITA_GXM_SCREEN_HEIGHT * VITA_GXM_SCREEN_STRIDE * 4);
-    }
-/*
     void *color_buffer;
     float clear_color[4];
 
@@ -866,7 +854,6 @@ void gxm_render_clear()
     sceGxmSetVertexProgram(data->gxm_context, data->textureVertexProgram);
 	sceGxmSetFragmentProgram(data->gxm_context, data->textureFragmentProgram);
 	sceGxmSetVertexStream(data->gxm_context, 0, data->vertices);
-*/
 }
 
 static unsigned int back_buffer_index_for_common_dialog = 0;
@@ -922,7 +909,6 @@ void gxm_init_for_common_dialog(void)
         sceGxmSyncObjectCreate(&buffer_for_common_dialog[i].sync);
     }
     sceGxmDisplayQueueFinish();
-    message_box_active = 1;
 }
 
 void gxm_swap_for_common_dialog(void)
@@ -955,5 +941,4 @@ void gxm_term_for_common_dialog(void)
         mem_gpu_free(buffer_for_common_dialog[i].uid);
         sceGxmSyncObjectDestroy(buffer_for_common_dialog[i].sync);
     }
-    message_box_active = 0;
 }
