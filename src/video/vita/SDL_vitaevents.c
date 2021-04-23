@@ -45,21 +45,21 @@ SceWChar16 ime_buffer[SCE_IME_DIALOG_MAX_TEXT_LENGTH];
 
 static void utf8_to_utf16(const uint8_t *src, uint16_t *dst)
 {
-	int i;
-	for (i = 0; src[i];) {
-		if ((src[i] & 0xE0) == 0xE0) {
-			*(dst++) = ((src[i] & 0x0F) << 12) | ((src[i + 1] & 0x3F) << 6) | (src[i + 2] & 0x3F);
-			i += 3;
-		} else if ((src[i] & 0xC0) == 0xC0) {
-			*(dst++) = ((src[i] & 0x1F) << 6) | (src[i + 1] & 0x3F);
-			i += 2;
-		} else {
-			*(dst++) = src[i];
-			i += 1;
-		}
-	}
+    int i;
+    for (i = 0; src[i];) {
+        if ((src[i] & 0xE0) == 0xE0) {
+            *(dst++) = ((src[i] & 0x0F) << 12) | ((src[i + 1] & 0x3F) << 6) | (src[i + 2] & 0x3F);
+            i += 3;
+        } else if ((src[i] & 0xC0) == 0xC0) {
+            *(dst++) = ((src[i] & 0x1F) << 6) | (src[i + 1] & 0x3F);
+            i += 2;
+        } else {
+            *(dst++) = src[i];
+            i += 1;
+        }
+    }
 
-	*dst = '\0';
+    *dst = '\0';
 }
 
 static void utf16_to_utf8(const uint16_t *src, uint8_t *dst) {
@@ -93,10 +93,10 @@ static void utf16_to_utf8(const uint16_t *src, uint8_t *dst) {
 void SDL_VITA_ShowScreenKeyboard(const char *initialText, bool clearText)
 {
     SceWChar16 title[SCE_IME_DIALOG_MAX_TITLE_LENGTH];
-	SceWChar16 text[SCE_IME_DIALOG_MAX_TEXT_LENGTH];
-	SDL_memset(&title, 0, sizeof(title));
-	SDL_memset(&text, 0, sizeof(text));
-	utf8_to_utf16((const uint8_t *)initialText, text);
+    SceWChar16 text[SCE_IME_DIALOG_MAX_TEXT_LENGTH];
+    SDL_memset(&title, 0, sizeof(title));
+    SDL_memset(&text, 0, sizeof(text));
+    utf8_to_utf16((const uint8_t *)initialText, text);
 
     SceInt32 res;
 
@@ -143,8 +143,8 @@ void SDL_VITA_HideScreenKeyboard()
 
 void VITA_PumpEvents(_THIS)
 {
-	VITA_PollKeyboard();
-	VITA_PollMouse();
+    VITA_PollKeyboard();
+    VITA_PollMouse();
     VITA_PollTouch();
 
     if (screenKeyboardActive == SDL_TRUE) {
@@ -200,7 +200,7 @@ void VITA_PumpEvents(_THIS)
 
 void VITA_InitOSKeymap(_THIS)
 {
-	/* do nothing. */
+    /* do nothing. */
 }
 
 /* end of SDL_vitaevents.c ... */

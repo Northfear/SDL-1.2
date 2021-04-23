@@ -554,7 +554,7 @@ int gxm_init()
     data->frontBufferIndex = 0;
 
     sceGxmSetVertexProgram(data->gxm_context, data->textureVertexProgram);
-	sceGxmSetFragmentProgram(data->gxm_context, data->textureFragmentProgram);
+    sceGxmSetFragmentProgram(data->gxm_context, data->textureFragmentProgram);
 
     return 0;
 }
@@ -663,7 +663,7 @@ void* gxm_texture_get_datap(const gxm_texture *texture)
 
 void gxm_texture_set_alloc_memblock_type(SceKernelMemBlockType type)
 {
-	textureMemBlockType = (type == 0) ? SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW : type;
+    textureMemBlockType = (type == 0) ? SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW : type;
 }
 
 gxm_texture* create_gxm_texture(unsigned int w, unsigned int h, SceGxmTextureFormat format)
@@ -722,36 +722,36 @@ gxm_texture* create_gxm_texture(unsigned int w, unsigned int h, SceGxmTextureFor
 
 void gxm_init_texture_scale(const gxm_texture *texture, float x, float y, float x_scale, float y_scale)
 {
-	const float w = x_scale * gxm_texture_get_width(texture);
-	const float h = y_scale * gxm_texture_get_height(texture);
+    const float w = x_scale * gxm_texture_get_width(texture);
+    const float h = y_scale * gxm_texture_get_height(texture);
 
-	data->vertices[0].x = x;
-	data->vertices[0].y = y;
-	data->vertices[0].z = +0.5f;
-	data->vertices[0].u = 0.0f;
-	data->vertices[0].v = 0.0f;
+    data->vertices[0].x = x;
+    data->vertices[0].y = y;
+    data->vertices[0].z = +0.5f;
+    data->vertices[0].u = 0.0f;
+    data->vertices[0].v = 0.0f;
 
-	data->vertices[1].x = x + w;
-	data->vertices[1].y = y;
-	data->vertices[1].z = +0.5f;
-	data->vertices[1].u = 1.0f;
-	data->vertices[1].v = 0.0f;
+    data->vertices[1].x = x + w;
+    data->vertices[1].y = y;
+    data->vertices[1].z = +0.5f;
+    data->vertices[1].u = 1.0f;
+    data->vertices[1].v = 0.0f;
 
-	data->vertices[2].x = x;
-	data->vertices[2].y = y + h;
-	data->vertices[2].z = +0.5f;
-	data->vertices[2].u = 0.0f;
-	data->vertices[2].v = 1.0f;
+    data->vertices[2].x = x;
+    data->vertices[2].y = y + h;
+    data->vertices[2].z = +0.5f;
+    data->vertices[2].u = 0.0f;
+    data->vertices[2].v = 1.0f;
 
-	data->vertices[3].x = x + w;
-	data->vertices[3].y = y + h;
-	data->vertices[3].z = +0.5f;
-	data->vertices[3].u = 1.0f;
-	data->vertices[3].v = 1.0f;
+    data->vertices[3].x = x + w;
+    data->vertices[3].y = y + h;
+    data->vertices[3].z = +0.5f;
+    data->vertices[3].u = 1.0f;
+    data->vertices[3].v = 1.0f;
 
-	// Set the texture to the TEXUNIT0
-	sceGxmSetFragmentTexture(data->gxm_context, 0, &texture->gxm_tex);
-	sceGxmSetVertexStream(data->gxm_context, 0, data->vertices);
+    // Set the texture to the TEXUNIT0
+    sceGxmSetFragmentTexture(data->gxm_context, 0, &texture->gxm_tex);
+    sceGxmSetVertexStream(data->gxm_context, 0, data->vertices);
 }
 
 void gxm_start_drawing()
@@ -771,19 +771,19 @@ void gxm_start_drawing()
 void gxm_draw_texture(const gxm_texture *texture)
 {
     void *vertex_wvp_buffer;
-	sceGxmReserveVertexDefaultUniformBuffer(data->gxm_context, &vertex_wvp_buffer);
-	sceGxmSetUniformDataF(vertex_wvp_buffer, data->textureWvpParam, 0, 16, data->ortho_matrix);
-	sceGxmDraw(data->gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP, SCE_GXM_INDEX_FORMAT_U16, data->linearIndices, 4);
+    sceGxmReserveVertexDefaultUniformBuffer(data->gxm_context, &vertex_wvp_buffer);
+    sceGxmSetUniformDataF(vertex_wvp_buffer, data->textureWvpParam, 0, 16, data->ortho_matrix);
+    sceGxmDraw(data->gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP, SCE_GXM_INDEX_FORMAT_U16, data->linearIndices, 4);
 }
 
 void gxm_wait_rendering_done()
 {
-	sceGxmFinish(data->gxm_context);
+    sceGxmFinish(data->gxm_context);
 }
 
 void gxm_end_drawing()
 {
-	sceGxmEndScene(data->gxm_context, NULL, NULL);
+    sceGxmEndScene(data->gxm_context, NULL, NULL);
 }
 
 void gxm_swap_buffers()
@@ -825,7 +825,7 @@ void gxm_texture_set_filters(gxm_texture *texture, SceGxmTextureFilter min_filte
 
 void gxm_set_vblank_wait(int enable)
 {
-	data->displayData.vblank_wait = enable;
+    data->displayData.vblank_wait = enable;
 }
 
 void gxm_render_clear()
@@ -852,8 +852,8 @@ void gxm_render_clear()
 
     // set back the texture program
     sceGxmSetVertexProgram(data->gxm_context, data->textureVertexProgram);
-	sceGxmSetFragmentProgram(data->gxm_context, data->textureFragmentProgram);
-	sceGxmSetVertexStream(data->gxm_context, 0, data->vertices);
+    sceGxmSetFragmentProgram(data->gxm_context, data->textureFragmentProgram);
+    sceGxmSetVertexStream(data->gxm_context, 0, data->vertices);
 }
 
 static unsigned int back_buffer_index_for_common_dialog = 0;

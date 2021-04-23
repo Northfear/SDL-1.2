@@ -34,95 +34,95 @@ Uint8 firstTouchId;
 
 void VITA_InitTouch(void)
 {
-	sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, SCE_TOUCH_SAMPLING_STATE_START);
-	sceTouchGetPanelInfo(SCE_TOUCH_PORT_FRONT, &panelinfo);
-	dispWidth = (float)(panelinfo.maxDispX - panelinfo.minDispX);
-	dispHeight = (float)(panelinfo.maxDispY - panelinfo.minDispY);
+    sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, SCE_TOUCH_SAMPLING_STATE_START);
+    sceTouchGetPanelInfo(SCE_TOUCH_PORT_FRONT, &panelinfo);
+    dispWidth = (float)(panelinfo.maxDispX - panelinfo.minDispX);
+    dispHeight = (float)(panelinfo.maxDispY - panelinfo.minDispY);
 }
 
 void VITA_PollTouch(void)
 {
-	Sint16 x;
-	Sint16 y;
-	touch_data_old = touch_data;
+    Sint16 x;
+    Sint16 y;
+    touch_data_old = touch_data;
 
-	sceTouchPeek(SCE_TOUCH_PORT_FRONT, &touch_data, 1);
-	if (touch_data.reportNum > 0)
-	{
-		// emulate mouse events only for 1st touch
-		if (touch_data_old.reportNum == 0)
-			firstTouchId = touch_data.report[0].id;
+    sceTouchPeek(SCE_TOUCH_PORT_FRONT, &touch_data, 1);
+    if (touch_data.reportNum > 0)
+    {
+        // emulate mouse events only for 1st touch
+        if (touch_data_old.reportNum == 0)
+            firstTouchId = touch_data.report[0].id;
 
-		for (int i = 0; i < touch_data.reportNum; i++)
-		{
-			if (touch_data.report[i].id != firstTouchId)
-				continue;
+        for (int i = 0; i < touch_data.reportNum; i++)
+        {
+            if (touch_data.report[i].id != firstTouchId)
+                continue;
 
-			VITA_ConvertTouchXYToSDLXY(&x, &y, touch_data.report[i].x, touch_data.report[i].y);
-			SDL_PrivateMouseMotion(0, 0, x, y);
+            VITA_ConvertTouchXYToSDLXY(&x, &y, touch_data.report[i].x, touch_data.report[i].y);
+            SDL_PrivateMouseMotion(0, 0, x, y);
 
-			// LMB SDL_PRESSED on it's initial touch down
-			if (touch_data_old.reportNum == 0)
-			{
-				SDL_PrivateMouseButton(SDL_PRESSED, SDL_BUTTON_LEFT, x, y);
-			}
-			break;
-		}
-	}
+            // LMB SDL_PRESSED on it's initial touch down
+            if (touch_data_old.reportNum == 0)
+            {
+                SDL_PrivateMouseButton(SDL_PRESSED, SDL_BUTTON_LEFT, x, y);
+            }
+            break;
+        }
+    }
 
-	// check for touch up
-	if (touch_data_old.reportNum > 0)
-	{
-		for (int i = 0; i < touch_data_old.reportNum; i++)
-		{
-			if (touch_data_old.report[i].id != firstTouchId)
-				continue;
+    // check for touch up
+    if (touch_data_old.reportNum > 0)
+    {
+        for (int i = 0; i < touch_data_old.reportNum; i++)
+        {
+            if (touch_data_old.report[i].id != firstTouchId)
+                continue;
 
-			int touch_up = 1;
+            int touch_up = 1;
 
-			if (touch_data.reportNum > 0)
-			{
-				for (int j = 0; j < touch_data.reportNum; j++)
-				{
-					if (touch_data.report[j].id == touch_data_old.report[i].id )
-					{
-						touch_up = 0;
-						break;
-					}
-				}
-			}
+            if (touch_data.reportNum > 0)
+            {
+                for (int j = 0; j < touch_data.reportNum; j++)
+                {
+                    if (touch_data.report[j].id == touch_data_old.report[i].id )
+                    {
+                        touch_up = 0;
+                        break;
+                    }
+                }
+            }
 
-			if (touch_up)
-			{
-				VITA_ConvertTouchXYToSDLXY(&x, &y, touch_data_old.report[i].x, touch_data_old.report[i].y);
-				SDL_PrivateMouseButton(SDL_RELEASED, SDL_BUTTON_LEFT, x, y);
-			}
+            if (touch_up)
+            {
+                VITA_ConvertTouchXYToSDLXY(&x, &y, touch_data_old.report[i].x, touch_data_old.report[i].y);
+                SDL_PrivateMouseButton(SDL_RELEASED, SDL_BUTTON_LEFT, x, y);
+            }
 
-			break;
-		}
-	}
+            break;
+        }
+    }
 }
 
 void VITA_ConvertTouchXYToSDLXY(Sint16 *sdl_x, Sint16 *sdl_y, Sint16 vita_x, Sint16 vita_y) 
 {
-	float x = (vita_x - panelinfo.minDispX) / dispWidth;
-	float y = (vita_y - panelinfo.minDispY) / dispHeight;
+    float x = (vita_x - panelinfo.minDispX) / dispWidth;
+    float y = (vita_y - panelinfo.minDispY) / dispHeight;
 
-	x = SDL_max(x, 0.0);
-	x = SDL_min(x, 1.0);
-	y = SDL_max(y, 0.0);
-	y = SDL_min(y, 1.0);
+    x = SDL_max(x, 0.0);
+    x = SDL_min(x, 1.0);
+    y = SDL_max(y, 0.0);
+    y = SDL_min(y, 1.0);
 
-	SDL_Rect surfaceRect;
-	SDL_Rect scaledRect;
-	SDL_VITA_GetSurfaceRect(&surfaceRect, &scaledRect);
+    SDL_Rect surfaceRect;
+    SDL_Rect scaledRect;
+    SDL_VITA_GetSurfaceRect(&surfaceRect, &scaledRect);
 
-	// translate to game coordinates
-	x = (SCREEN_W * x - scaledRect.x) * ((float)surfaceRect.w / scaledRect.w);
-	y = (SCREEN_H * y - scaledRect.y) * ((float)surfaceRect.h / scaledRect.h);
+    // translate to game coordinates
+    x = (SCREEN_W * x - scaledRect.x) * ((float)surfaceRect.w / scaledRect.w);
+    y = (SCREEN_H * y - scaledRect.y) * ((float)surfaceRect.h / scaledRect.h);
 
-	*sdl_x = x;
-	*sdl_y = y;
+    *sdl_x = x;
+    *sdl_y = y;
 }
 
 /* vi: set ts=4 sw=4 expandtab: */
