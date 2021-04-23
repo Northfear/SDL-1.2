@@ -27,15 +27,12 @@
 
 void SDL_VITA_ShowMessageBox(const char *messageText)
 {
-    SceCommonDialogConfigParam commonDialogConfigParam;
     SceMsgDialogParam param;
     SceMsgDialogUserMessageParam msgParam;
-    
-    SceCommonDialogErrorCode init_result;
+
+    SceInt32 init_result;
     SDL_bool setup_minimal_gxm = SDL_FALSE;
 
-    SDL_memset(&commonDialogConfigParam, 0, sizeof(commonDialogConfigParam));
-    sceCommonDialogSetConfigParam(&commonDialogConfigParam);
     SDL_memset(&param, 0, sizeof(param));
     sceMsgDialogParamInit(&param);
     param.mode = SCE_MSG_DIALOG_MODE_USER_MSG;
@@ -45,7 +42,7 @@ void SDL_VITA_ShowMessageBox(const char *messageText)
     param.userMsgParam = &msgParam;
 
     init_result = sceMsgDialogInit(&param);
-    
+
     // Setup display if it hasn't been initialized before
     if (init_result == SCE_COMMON_DIALOG_ERROR_GXM_IS_UNINITIALIZED)
     {
