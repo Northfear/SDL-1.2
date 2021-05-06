@@ -60,6 +60,7 @@ void gxm_init_texture_scale(const gxm_texture *texture, float x, float y, float 
 void gxm_end_drawing();
 void gxm_swap_buffers();
 void gxm_set_vblank_wait(int enable);
+void gxm_set_finish_wait(int enable);
 void gxm_render_clear();
 
 void gxm_minimal_init_for_common_dialog(void);

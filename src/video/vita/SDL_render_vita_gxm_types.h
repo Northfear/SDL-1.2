@@ -95,8 +95,8 @@ typedef struct
     unsigned int backBufferIndex;
     unsigned int frontBufferIndex;
 
-    texture_vertex *vertices;
-    SceUID verticesUid;
+    texture_vertex *screenVertices;
+    SceUID screenVerticesUid;
 
     float ortho_matrix[4*4];
 

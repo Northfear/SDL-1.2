@@ -59,7 +59,6 @@ typedef struct private_hwdata {
 } private_hwdata;
 
 static int vsync = 1;
-static int gxm_finish_wait = 1;
 static int clear_required = 0;
 
 /* Initialization/Query functions */
@@ -173,6 +172,7 @@ SDL_Rect **VITA_ListModes(_THIS, SDL_PixelFormat *format, Uint32 flags)
 {
     static SDL_Rect VITA_Rects[] = {
         {0, 0, 320, 200},
+        {0, 0, 480, 272},
         {0, 0, 640, 400},
         {0, 0, 960, 544},
     };
@@ -180,6 +180,7 @@ SDL_Rect **VITA_ListModes(_THIS, SDL_PixelFormat *format, Uint32 flags)
         &VITA_Rects[0],
         &VITA_Rects[1],
         &VITA_Rects[2],
+        &VITA_Rects[3],
         NULL
     };
     SDL_Rect **modes = VITA_modes;
@@ -298,6 +299,7 @@ static int VITA_AllocHWSurface(_THIS, SDL_Surface *surface)
     // Don't force SDL_HWSURFACE. Screen surface still works as SDL_SWSURFACE (but may require sceGxmFinish on flip)
     // Mixing SDL_HWSURFACE and SDL_SWSURFACE drops fps by 10% or so
     // Not sure if there's even a point of having anything as SDL_HWSURFACE
+    // UPD: Yeah, there's a point is some cases (like weird bugs with 32 bits with SW or HW only surfaces in gemrb)
     //surface->flags |= SDL_HWSURFACE;
 
     return(0);
@@ -335,12 +337,6 @@ static int VITA_FlipHWSurface(_THIS, SDL_Surface *surface)
     }
     gxm_draw_texture(surface->hwdata->texture);
     gxm_end_drawing();
-
-    if(gxm_finish_wait == 1)
-    {
-        gxm_wait_rendering_done();
-    }
-
     gxm_swap_buffers();
 }
 
@@ -423,7 +419,7 @@ void SDL_VITA_SetVideoModeSync(int enable_vsync)
 // custom vita function for doing sceGxmFinish on Flip (may be required in case of visual bugs)
 void SDL_VITA_SetWaitGxmFinish(int gxm_wait)
 {
-    gxm_finish_wait = gxm_wait;
+    gxm_set_finish_wait(gxm_wait);
 }
 
 // custom vita function for setting mem type for new hw texture allocations

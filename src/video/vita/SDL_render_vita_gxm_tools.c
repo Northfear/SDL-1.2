@@ -36,6 +36,8 @@
 
 VITA_GXM_RenderData *data;
 static SceKernelMemBlockType textureMemBlockType = SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW;
+static int gxm_finish_wait = 1;
+SceGxmNotification fragmentNotif;
 
 
 void init_orthographic_matrix(float *m, float left, float right, float bottom, float top, float near, float far)
@@ -240,14 +242,12 @@ int gxm_init()
             return err;
         }
 
-
         // create a sync object that we will associate with this buffer
         err = sceGxmSyncObjectCreate(&data->displayBufferSync[i]);
         if (err != SCE_OK) {
             SDL_SetError("sync object creation failed: %d\n", err);
             return err;
         }
-
     }
 
     // compute the memory footprint of the depth buffer
@@ -468,7 +468,7 @@ int gxm_init()
         &data->linearIndicesUid
     );
 
-    for (uint16_t i=0; i<=4; ++i)
+    for (uint16_t i = 0; i < 4; ++i)
     {
         data->linearIndices[i] = i;
     }
@@ -541,12 +541,12 @@ int gxm_init()
     data->clearClearColorParam = (SceGxmProgramParameter *)sceGxmProgramFindParameterByName(clearFragmentProgramGxp, "uClearColor");
 
     // Allocate memory for the memory pool
-    data->vertices = mem_gpu_alloc(
+    data->screenVertices = mem_gpu_alloc(
         SCE_KERNEL_MEMBLOCK_TYPE_USER_RW,
         4 * sizeof(texture_vertex),
         sizeof(texture_vertex),
         SCE_GXM_MEMORY_ATTRIB_READ,
-        &data->verticesUid
+        &data->screenVerticesUid
     );
     init_orthographic_matrix(data->ortho_matrix, 0.0f, VITA_GXM_SCREEN_WIDTH, VITA_GXM_SCREEN_HEIGHT, 0.0f, 0.0f, 1.0f);
 
@@ -555,6 +555,10 @@ int gxm_init()
 
     sceGxmSetVertexProgram(data->gxm_context, data->textureVertexProgram);
     sceGxmSetFragmentProgram(data->gxm_context, data->textureFragmentProgram);
+
+    volatile unsigned int *const notificationMem = sceGxmGetNotificationRegion();
+    fragmentNotif.address = notificationMem;
+	fragmentNotif.value = 1;
 
     return 0;
 }
@@ -611,7 +615,7 @@ void gxm_finish()
     mem_gpu_free(data->vertexRingBufferUid);
     mem_gpu_free(data->vdmRingBufferUid);
     SDL_free(data->contextParams.hostMem);
-    mem_gpu_free(data->verticesUid);
+    mem_gpu_free(data->screenVerticesUid);
     // terminate libgxm
     sceGxmTerminate();
 
@@ -725,33 +729,33 @@ void gxm_init_texture_scale(const gxm_texture *texture, float x, float y, float 
     const float w = x_scale * gxm_texture_get_width(texture);
     const float h = y_scale * gxm_texture_get_height(texture);
 
-    data->vertices[0].x = x;
-    data->vertices[0].y = y;
-    data->vertices[0].z = +0.5f;
-    data->vertices[0].u = 0.0f;
-    data->vertices[0].v = 0.0f;
+    data->screenVertices[0].x = x;
+    data->screenVertices[0].y = y;
+    data->screenVertices[0].z = +0.5f;
+    data->screenVertices[0].u = 0.0f;
+    data->screenVertices[0].v = 0.0f;
 
-    data->vertices[1].x = x + w;
-    data->vertices[1].y = y;
-    data->vertices[1].z = +0.5f;
-    data->vertices[1].u = 1.0f;
-    data->vertices[1].v = 0.0f;
+    data->screenVertices[1].x = x + w;
+    data->screenVertices[1].y = y;
+    data->screenVertices[1].z = +0.5f;
+    data->screenVertices[1].u = 1.0f;
+    data->screenVertices[1].v = 0.0f;
 
-    data->vertices[2].x = x;
-    data->vertices[2].y = y + h;
-    data->vertices[2].z = +0.5f;
-    data->vertices[2].u = 0.0f;
-    data->vertices[2].v = 1.0f;
+    data->screenVertices[2].x = x;
+    data->screenVertices[2].y = y + h;
+    data->screenVertices[2].z = +0.5f;
+    data->screenVertices[2].u = 0.0f;
+    data->screenVertices[2].v = 1.0f;
 
-    data->vertices[3].x = x + w;
-    data->vertices[3].y = y + h;
-    data->vertices[3].z = +0.5f;
-    data->vertices[3].u = 1.0f;
-    data->vertices[3].v = 1.0f;
+    data->screenVertices[3].x = x + w;
+    data->screenVertices[3].y = y + h;
+    data->screenVertices[3].z = +0.5f;
+    data->screenVertices[3].u = 1.0f;
+    data->screenVertices[3].v = 1.0f;
 
     // Set the texture to the TEXUNIT0
     sceGxmSetFragmentTexture(data->gxm_context, 0, &texture->gxm_tex);
-    sceGxmSetVertexStream(data->gxm_context, 0, data->vertices);
+    sceGxmSetVertexStream(data->gxm_context, 0, data->screenVertices);
 }
 
 void gxm_start_drawing()
@@ -766,6 +770,8 @@ void gxm_start_drawing()
         &data->displaySurface[data->backBufferIndex],
         &data->depthSurface
     );
+
+    *fragmentNotif.address = 0;
 }
 
 void gxm_draw_texture(const gxm_texture *texture)
@@ -783,7 +789,7 @@ void gxm_wait_rendering_done()
 
 void gxm_end_drawing()
 {
-    sceGxmEndScene(data->gxm_context, NULL, NULL);
+    sceGxmEndScene(data->gxm_context, NULL, &fragmentNotif);
 }
 
 void gxm_swap_buffers()
@@ -806,6 +812,11 @@ void gxm_swap_buffers()
 
     sceCommonDialogUpdate(&updateParam);
 
+    if (gxm_finish_wait && *fragmentNotif.address != fragmentNotif.value)
+    {
+        sceGxmFinish(data->gxm_context);
+    }
+
     sceGxmDisplayQueueAddEntry(
         data->displayBufferSync[data->frontBufferIndex],    // OLD fb
         data->displayBufferSync[data->backBufferIndex],     // NEW fb
@@ -826,6 +837,11 @@ void gxm_texture_set_filters(gxm_texture *texture, SceGxmTextureFilter min_filte
 void gxm_set_vblank_wait(int enable)
 {
     data->displayData.vblank_wait = enable;
+}
+
+void gxm_set_finish_wait(int enable)
+{
+    gxm_finish_wait = enable;
 }
 
 void gxm_render_clear()
@@ -853,7 +869,7 @@ void gxm_render_clear()
     // set back the texture program
     sceGxmSetVertexProgram(data->gxm_context, data->textureVertexProgram);
     sceGxmSetFragmentProgram(data->gxm_context, data->textureFragmentProgram);
-    sceGxmSetVertexStream(data->gxm_context, 0, data->vertices);
+    sceGxmSetVertexStream(data->gxm_context, 0, data->screenVertices);
 }
 
 static unsigned int back_buffer_index_for_common_dialog = 0;
