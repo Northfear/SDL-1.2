@@ -241,17 +241,24 @@ SDL_Surface *VITA_SetVideoMode(_THIS, SDL_Surface *current,
     }
 
     VITA_AllocHWSurface(this, current);
+
+    // clear and center non-fullscreen screen surfaces by default
+    if (width != SCREEN_W || height != SCREEN_H)
+    {
+        clear_required = 1;
+        current->hwdata->dst.x = (SCREEN_W - width) / 2;
+        current->hwdata->dst.y = (SCREEN_H - height) / 2;
+    }
+    else
+    {
+        clear_required = 0;
+    }
+
     gxm_init_texture_scale(
         current->hwdata->texture,
         current->hwdata->dst.x, current->hwdata->dst.y,
         (float)current->hwdata->dst.w/(float)current->w,
         (float)current->hwdata->dst.h/(float)current->h);
-
-    // non-fullscreen screen surfaces require clear by default
-    if (width != SCREEN_W || height != SCREEN_H)
-        clear_required = 1;
-    else
-        clear_required = 0;
 
     return(current);
 }
