@@ -558,7 +558,7 @@ int gxm_init()
 
     volatile unsigned int *const notificationMem = sceGxmGetNotificationRegion();
     fragmentNotif.address = notificationMem;
-	fragmentNotif.value = 1;
+    fragmentNotif.value = 1;
 
     return 0;
 }

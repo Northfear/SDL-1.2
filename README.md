@@ -11,9 +11,7 @@
 
 ## Build instructions
 
-- ```make -f Makefile.vita```
-
-- ```make install```
+```make -f Makefile.vita install```
 
 ## Custom functions
 
