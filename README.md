@@ -4,7 +4,7 @@
 
 - 1.2.16 version bump
 - Support of 8/15/16/24/32 bit surfaces
-- Harware accelerated blits and fills
+- Hardware accelerated blits and fills
 - Front touchpad support (Mouse emulation. Works with scaled/centered images)
 - Custom functions for on screen keyboard and message box (Backported from SDL2 Vita port)
 
@@ -18,7 +18,7 @@ TO enable hardware acceleration use ```VITA_HW_ACCEL=1``` flag
 
 ```make -f Makefile.vita VITA_HW_ACCEL=1 install```
 
-You can choose which functions are accelerated by using following flags together with ```VITA_HW_ACCEL=1```.
+You can choose which functions are accelerated by using the following flags together with ```VITA_HW_ACCEL=1```.
 
 `VITA_BLIT_HW=1` Enables accelerated blits (enabled by default).
 
@@ -52,7 +52,7 @@ Sets type of memory block for all new hardware surface allocations. ```SCE_KERNE
 
 ```void SDL_VITA_ShowScreenKeyboard(const char *initialText, bool clearText);```
 
-Opens on-screen keyboard with ```initialText``` pre-filled. Input is done with emulation of key events, so YMMV. When ```clearText``` is set to ```true``` SDL also emulates DEL and BACKSPACE button presses to (hopefully) clear the old text. Maximal number of SDL events is 128, so with ```clearText``` set to ```true``` 64 is allocated to clear the old text (32 backspace, 32 del) and 64 is used for the rest of emulated input. Maximum of ~128 input characters is supported with ```clearText``` set to ```false```, but you'll have to clear the input field inside the game yourself.
+Opens on-screen keyboard with ```initialText``` pre-filled. Input is done with emulation of key events, so YMMV. When ```clearText``` is set to ```true``` SDL also emulates DEL and BACKSPACE button presses to (hopefully) clear the old text. Maximal number of SDL events is 128, so with ```clearText``` set to ```true``` 64 is allocated to clear the old text (32 backspace, 32 del) and 64 is used for the rest of the emulated input. Maximum of ~128 input characters is supported with ```clearText``` set to ```false```, but you'll have to clear the input field inside the game yourself.
 
 ```void SDL_VITA_HideScreenKeyboard();```
 
