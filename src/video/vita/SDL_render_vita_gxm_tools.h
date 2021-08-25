@@ -30,6 +30,7 @@
 #include <psp2/kernel/sysmem.h>
 
 #include "SDL_render_vita_gxm_types.h"
+#include "SDL.h"
 
 #ifndef SCE_OK
 #define SCE_OK 0
@@ -54,14 +55,21 @@ unsigned int gxm_texture_get_width(const gxm_texture *texture);
 unsigned int gxm_texture_get_height(const gxm_texture *texture);
 unsigned int gxm_texture_get_stride(const gxm_texture *texture);
 void *gxm_texture_get_datap(const gxm_texture *texture);
+void *gxm_texture_get_palette(const gxm_texture *texture);
 
-void gxm_draw_texture(const gxm_texture *texture);
+void gxm_draw_screen_texture(gxm_texture *texture);
 void gxm_init_texture_scale(const gxm_texture *texture, float x, float y, float x_scale, float y_scale);
 void gxm_end_drawing();
 void gxm_swap_buffers();
 void gxm_set_vblank_wait(int enable);
 void gxm_set_finish_wait(int enable);
 void gxm_render_clear();
+
+#ifdef VITA_HW_ACCEL
+void gxm_fill_rect(gxm_texture *dst, SDL_Rect dstrect, float r, float g, float b, float a);
+void gxm_blit(gxm_texture *src, SDL_Rect srcrect, gxm_texture *dst, SDL_Rect dstrect, int alpha_blit);
+void gxm_lock_texture(gxm_texture *texture);
+#endif
 
 void gxm_minimal_init_for_common_dialog(void);
 void gxm_minimal_term_for_common_dialog(void);

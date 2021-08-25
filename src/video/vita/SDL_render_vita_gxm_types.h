@@ -39,6 +39,9 @@
 
 #define VITA_GXM_BUFFERS          3
 #define VITA_GXM_PENDING_SWAPS    2
+#ifdef VITA_HW_ACCEL
+#define VITA_GXM_POOL_SIZE        1 * 1024 * 1024
+#endif
 
 
 typedef struct
@@ -64,11 +67,26 @@ typedef struct gxm_texture {
     SceGxmTexture gxm_tex;
     SceUID data_UID;
     SceUID palette_UID;
+#ifdef VITA_HW_ACCEL
     SceGxmRenderTarget *gxm_rendertarget;
     SceGxmColorSurface gxm_colorsurface;
     SceGxmDepthStencilSurface gxm_depthstencil;
     SceUID depth_UID;
+    int notification_id;
+    SceGxmNotification fragment_notif;
+#endif
 } gxm_texture;
+
+typedef struct fragment_programs {
+    SceGxmFragmentProgram *texture;
+} fragment_programs;
+
+typedef struct blend_fragment_programs {
+    fragment_programs blend_mode_none;
+#ifdef VITA_HW_ACCEL
+    fragment_programs blend_mode_blend;
+#endif
+} blend_fragment_programs;
 
 typedef struct
 {
@@ -123,6 +141,13 @@ typedef struct
     SceUID clearVerticesUid;
     uint16_t *linearIndices;
     clear_vertex *clearVertices;
+    blend_fragment_programs blendFragmentPrograms;
+#ifdef VITA_HW_ACCEL
+    void* pool_addr[2];
+    SceUID poolUid[2];
+    unsigned int pool_index;
+    unsigned int current_pool;
+#endif
 } VITA_GXM_RenderData;
 
 

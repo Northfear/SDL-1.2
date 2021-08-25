@@ -35,6 +35,25 @@
 
 #define __VITA__ 1
 
+#ifdef VITA_HW_ACCEL
+#ifndef VITA_BLIT_HW
+#define VITA_BLIT_HW 1
+#endif
+#ifndef VITA_BLIT_HW_A
+#define VITA_BLIT_HW_A 0
+#endif
+#ifndef VITA_FILL_HW
+#define VITA_FILL_HW 1
+#endif
+#else
+#undef VITA_BLIT_HW
+#undef VITA_BLIT_HW_A
+#undef VITA_FILL_HW
+#define VITA_BLIT_HW 0
+#define VITA_BLIT_HW_A 0
+#define VITA_FILL_HW 0
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif

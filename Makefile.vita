@@ -5,6 +5,28 @@ CFLAGS  = -Ofast -mcpu=cortex-a9 -mfpu=neon -fgraphite-identity -floop-nest-opti
 $(INCLUDE) -lSceLibc_stub -Werror \
 -Dmemcpy=sceClibMemcpy -Dmemset=sceClibMemset -Dmemmove=sceClibMemmove -Dmemcmp=sceClibMemcmp
 
+ifeq ($(VITA_HW_ACCEL),1)
+CFLAGS += -DVITA_HW_ACCEL
+ifeq ($(VITA_BLIT_HW),1)
+CFLAGS += -DVITA_BLIT_HW=1
+endif
+ifeq ($(VITA_BLIT_HW_A),1)
+CFLAGS += -DVITA_BLIT_HW_A=1
+endif
+ifeq ($(VITA_FILL_HW),1)
+CFLAGS += -DVITA_FILL_HW=1
+endif
+ifeq ($(VITA_BLIT_HW),0)
+CFLAGS += -DVITA_BLIT_HW=0
+endif
+ifeq ($(VITA_BLIT_HW_A),0)
+CFLAGS += -DVITA_BLIT_HW_A=0
+endif
+ifeq ($(VITA_FILL_HW),0)
+CFLAGS += -DVITA_FILL_HW=0
+endif
+endif
+
 CC	= arm-vita-eabi-gcc
 AR	= arm-vita-eabi-gcc-ar
 RANLIB	= arm-vita-eabi-gcc-ranlib

@@ -37,7 +37,13 @@
 VITA_GXM_RenderData *data;
 static SceKernelMemBlockType textureMemBlockType = SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW;
 static int gxm_finish_wait = 1;
-SceGxmNotification fragmentNotif;
+volatile unsigned int *notificationMem;
+SceGxmNotification flipFragmentNotif;
+
+#ifdef VITA_HW_ACCEL
+#define NOTIF_NUM 1024
+int notification_busy[NOTIF_NUM];
+#endif
 
 
 void init_orthographic_matrix(float *m, float left, float right, float bottom, float top, float near, float far)
@@ -103,6 +109,66 @@ static int tex_format_to_bytespp(SceGxmTextureFormat format)
         return 4;
     }
 }
+
+static void make_fragment_programs(VITA_GXM_RenderData *data, fragment_programs *out, const SceGxmBlendInfo *blend_info)
+{
+    int err = sceGxmShaderPatcherCreateFragmentProgram(
+        data->shaderPatcher,
+        data->textureFragmentProgramId,
+        SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4,
+        0,
+        blend_info,
+        textureVertexProgramGxp,
+        &out->texture
+    );
+
+    if (err != 0) {
+        SDL_SetError("Patcher create fragment failed: %d\n", err);
+        return;
+    }
+}
+
+static void free_fragment_programs(VITA_GXM_RenderData *data, fragment_programs *out)
+{
+    sceGxmShaderPatcherReleaseFragmentProgram(data->shaderPatcher, out->texture);
+}
+
+#ifdef VITA_HW_ACCEL
+static void set_alpha_blend(int blend_enabled)
+{
+    fragment_programs *in;
+
+    if (blend_enabled)
+        in = &data->blendFragmentPrograms.blend_mode_blend;
+    else
+        in = &data->blendFragmentPrograms.blend_mode_none;
+
+    data->textureFragmentProgram = in->texture;
+}
+
+void *pool_malloc(VITA_GXM_RenderData *data, unsigned int size)
+{
+    if ((data->pool_index + size) < VITA_GXM_POOL_SIZE) {
+        void *addr = (void *)((unsigned int)data->pool_addr[data->current_pool] + data->pool_index);
+        data->pool_index += size;
+        return addr;
+    }
+    SDL_SetError("POOL OVERFLOW\n");
+    return NULL;
+}
+
+void *pool_memalign(VITA_GXM_RenderData *data, unsigned int size, unsigned int alignment)
+{
+    unsigned int new_index = (data->pool_index + alignment - 1) & ~(alignment - 1);
+    if ((new_index + size) < VITA_GXM_POOL_SIZE) {
+        void *addr = (void *)((unsigned int)data->pool_addr[data->current_pool] + new_index);
+        data->pool_index = new_index + size;
+        return addr;
+    }
+    SDL_SetError("POOL OVERFLOW\n");
+    return NULL;
+}
+#endif
 
 static void display_callback(const void *callback_data)
 {
@@ -511,7 +577,7 @@ int gxm_init()
     }
 
     // Fill SceGxmBlendInfo
-    static const SceGxmBlendInfo blend_info = {
+    static const SceGxmBlendInfo blend_info_none = {
         .colorFunc = SCE_GXM_BLEND_FUNC_NONE,
         .alphaFunc = SCE_GXM_BLEND_FUNC_NONE,
         .colorSrc  = SCE_GXM_BLEND_FACTOR_ZERO,
@@ -520,27 +586,31 @@ int gxm_init()
         .alphaDst  = SCE_GXM_BLEND_FACTOR_ZERO,
         .colorMask = SCE_GXM_COLOR_MASK_ALL
     };
+    // Create variations of the fragment program based on blending mode
+    make_fragment_programs(data, &data->blendFragmentPrograms.blend_mode_none, &blend_info_none);
 
-    err = sceGxmShaderPatcherCreateFragmentProgram(
-        data->shaderPatcher,
-        data->textureFragmentProgramId,
-        SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4,
-        0,
-        &blend_info,
-        textureVertexProgramGxp,
-        &data->textureFragmentProgram
-    );
+#ifdef VITA_HW_ACCEL
+    static const SceGxmBlendInfo blend_info_blend = {
+        .colorFunc = SCE_GXM_BLEND_FUNC_ADD,
+        .alphaFunc = SCE_GXM_BLEND_FUNC_ADD,
+        .colorSrc  = SCE_GXM_BLEND_FACTOR_SRC_ALPHA,
+        .colorDst  = SCE_GXM_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+        .alphaSrc  = SCE_GXM_BLEND_FACTOR_ONE,
+        .alphaDst  = SCE_GXM_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+        .colorMask = SCE_GXM_COLOR_MASK_ALL
+    };
+    make_fragment_programs(data, &data->blendFragmentPrograms.blend_mode_blend, &blend_info_blend);
+#endif
 
-    if (err != SCE_OK) {
-        SDL_SetError("Patcher create fragment failed: %d\n", err);
-        return err;
-    }
+    // Default to none blending mode
+    fragment_programs *in = &data->blendFragmentPrograms.blend_mode_none;
+    data->textureFragmentProgram = in->texture;
 
     // find vertex uniforms by name and cache parameter information
     data->textureWvpParam = (SceGxmProgramParameter *)sceGxmProgramFindParameterByName(textureVertexProgramGxp, "wvp");
     data->clearClearColorParam = (SceGxmProgramParameter *)sceGxmProgramFindParameterByName(clearFragmentProgramGxp, "uClearColor");
 
-    // Allocate memory for the memory pool
+    // Allocate memory for screen vertices
     data->screenVertices = mem_gpu_alloc(
         SCE_KERNEL_MEMBLOCK_TYPE_USER_RW,
         4 * sizeof(texture_vertex),
@@ -548,31 +618,60 @@ int gxm_init()
         SCE_GXM_MEMORY_ATTRIB_READ,
         &data->screenVerticesUid
     );
-    init_orthographic_matrix(data->ortho_matrix, 0.0f, VITA_GXM_SCREEN_WIDTH, VITA_GXM_SCREEN_HEIGHT, 0.0f, 0.0f, 1.0f);
+
+    init_orthographic_matrix(data->ortho_matrix, -1.0f, 1.0f, -1.0f, 1.0f, 0.0f, 1.0f);
+
+    notificationMem = sceGxmGetNotificationRegion();
+    flipFragmentNotif.address = notificationMem;
+    flipFragmentNotif.value = 1;
+
+#ifdef VITA_HW_ACCEL
+    for (int i = 0; i < NOTIF_NUM; ++i)
+    {
+        notification_busy[i] = 0;
+    }
+
+    // Allocate memory for the memory pool
+    data->pool_addr[0] = mem_gpu_alloc(
+        SCE_KERNEL_MEMBLOCK_TYPE_USER_RW,
+        VITA_GXM_POOL_SIZE,
+        sizeof(void *),
+        SCE_GXM_MEMORY_ATTRIB_READ,
+        &data->poolUid[0]
+    );
+
+    data->pool_addr[1] = mem_gpu_alloc(
+        SCE_KERNEL_MEMBLOCK_TYPE_USER_RW,
+        VITA_GXM_POOL_SIZE,
+        sizeof(void *),
+        SCE_GXM_MEMORY_ATTRIB_READ,
+        &data->poolUid[1]
+    );
+
+    data->pool_index = 0;
+    data->current_pool = 0;
+#endif
 
     data->backBufferIndex = 0;
     data->frontBufferIndex = 0;
-
-    sceGxmSetVertexProgram(data->gxm_context, data->textureVertexProgram);
-    sceGxmSetFragmentProgram(data->gxm_context, data->textureFragmentProgram);
-
-    volatile unsigned int *const notificationMem = sceGxmGetNotificationRegion();
-    fragmentNotif.address = notificationMem;
-    fragmentNotif.value = 1;
 
     return 0;
 }
 
 void gxm_finish()
 {
-    // wait until rendering is done
-    sceGxmFinish(data->gxm_context);
+    gxm_wait_rendering_done();
 
     // clean up allocations
     sceGxmShaderPatcherReleaseVertexProgram(data->shaderPatcher, data->textureVertexProgram);
     sceGxmShaderPatcherReleaseFragmentProgram(data->shaderPatcher, data->textureFragmentProgram);
     sceGxmShaderPatcherReleaseFragmentProgram(data->shaderPatcher, data->clearFragmentProgram);
     sceGxmShaderPatcherReleaseVertexProgram(data->shaderPatcher, data->clearVertexProgram);
+
+    free_fragment_programs(data, &data->blendFragmentPrograms.blend_mode_none);
+#ifdef VITA_HW_ACCEL
+    free_fragment_programs(data, &data->blendFragmentPrograms.blend_mode_blend);
+#endif
 
     mem_gpu_free(data->linearIndicesUid);
     mem_gpu_free(data->clearVerticesUid);
@@ -616,6 +715,10 @@ void gxm_finish()
     mem_gpu_free(data->vdmRingBufferUid);
     SDL_free(data->contextParams.hostMem);
     mem_gpu_free(data->screenVerticesUid);
+#ifdef VITA_HW_ACCEL
+    mem_gpu_free(data->poolUid[0]);
+    mem_gpu_free(data->poolUid[1]);
+#endif
     // terminate libgxm
     sceGxmTerminate();
 
@@ -625,16 +728,19 @@ void gxm_finish()
 void free_gxm_texture(gxm_texture *texture)
 {
     if (texture) {
+        if (texture->palette_UID) {
+            mem_gpu_free(texture->palette_UID);
+        }
+        mem_gpu_free(texture->data_UID);
+#ifdef VITA_HW_ACCEL
         if (texture->gxm_rendertarget) {
             sceGxmDestroyRenderTarget(texture->gxm_rendertarget);
         }
         if (texture->depth_UID) {
             mem_gpu_free(texture->depth_UID);
         }
-        if (texture->palette_UID) {
-            mem_gpu_free(texture->palette_UID);
-        }
-        mem_gpu_free(texture->data_UID);
+        notification_busy[texture->notification_id] = 0;
+#endif
         SDL_free(texture);
     }
 }
@@ -660,9 +766,14 @@ unsigned int gxm_texture_get_stride(const gxm_texture *texture)
         * tex_format_to_bytespp(gxm_texture_get_format(texture));
 }
 
-void* gxm_texture_get_datap(const gxm_texture *texture)
+void *gxm_texture_get_datap(const gxm_texture *texture)
 {
     return sceGxmTextureGetData(&texture->gxm_tex);
+}
+
+void *gxm_texture_get_palette(const gxm_texture *texture)
+{
+	return sceGxmTextureGetPalette(&texture->gxm_tex);
 }
 
 void gxm_texture_set_alloc_memblock_type(SceKernelMemBlockType type)
@@ -721,41 +832,157 @@ gxm_texture* create_gxm_texture(unsigned int w, unsigned int h, SceGxmTextureFor
         texture->palette_UID = 0;
     }
 
+#ifdef VITA_HW_ACCEL
+    {
+        void *depthBufferData;
+        const uint32_t aligneColorSurfacedStride = ALIGN(w, 8);
+        const uint32_t alignedWidth = ALIGN(w, SCE_GXM_TILE_SIZEX);
+        const uint32_t alignedHeight = ALIGN(h, SCE_GXM_TILE_SIZEY);
+        uint32_t sampleCount = alignedWidth*alignedHeight;
+        uint32_t depthStrideInSamples = alignedWidth;
+
+        SceGxmColorFormat colorFormat;
+
+        switch (format)
+        {
+            case SCE_GXM_TEXTURE_FORMAT_P8_ABGR:
+                colorFormat = SCE_GXM_COLOR_FORMAT_A8;  //kinda wrong
+                break;
+            case SCE_GXM_TEXTURE_FORMAT_A1R5G5B5:
+                colorFormat = SCE_GXM_COLOR_FORMAT_A1R5G5B5;
+                break;
+            case SCE_GXM_TEXTURE_FORMAT_R5G6B5:
+                colorFormat = SCE_GXM_COLOR_FORMAT_R5G6B5;
+                break;
+            case SCE_GXM_TEXTURE_FORMAT_U8U8U8_RGB:
+                colorFormat = SCE_GXM_COLOR_FORMAT_U8U8U8_RGB;
+                break;
+            case SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ARGB:
+                colorFormat = SCE_GXM_COLOR_FORMAT_A8R8G8B8;
+                break;
+            case SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ABGR:
+                colorFormat = SCE_GXM_COLOR_FORMAT_A8B8G8R8;
+                break;
+            default:
+                SDL_SetError("Invalid texture format!\n");
+                break;
+        }
+
+        int err = sceGxmColorSurfaceInit(
+            &texture->gxm_colorsurface,
+            colorFormat,
+            SCE_GXM_COLOR_SURFACE_LINEAR,
+            SCE_GXM_COLOR_SURFACE_SCALE_NONE,
+            SCE_GXM_OUTPUT_REGISTER_SIZE_32BIT,
+            w,
+            h,
+            aligneColorSurfacedStride,
+            texture_data
+        );
+
+        if (err < 0) {
+            free_gxm_texture(texture);
+            SDL_SetError("color surface init failed: %d\n", err);
+            return NULL;
+        }
+
+        // allocate it
+        depthBufferData = mem_gpu_alloc(
+            SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE,
+            4*sampleCount,
+            SCE_GXM_DEPTHSTENCIL_SURFACE_ALIGNMENT,
+            SCE_GXM_MEMORY_ATTRIB_READ | SCE_GXM_MEMORY_ATTRIB_WRITE,
+            &texture->depth_UID);
+
+        // create the SceGxmDepthStencilSurface structure
+        err = sceGxmDepthStencilSurfaceInit(
+            &texture->gxm_depthstencil,
+            SCE_GXM_DEPTH_STENCIL_FORMAT_S8D24,
+            SCE_GXM_DEPTH_STENCIL_SURFACE_TILED,
+            depthStrideInSamples,
+            depthBufferData,
+            NULL);
+
+        if (err < 0) {
+            free_gxm_texture(texture);
+            SDL_SetError("depth stencil init failed: %d\n", err);
+            return NULL;
+        }
+
+        {
+            SceGxmRenderTarget *tgt = NULL;
+
+            // set up parameters
+            SceGxmRenderTargetParams renderTargetParams;
+            memset(&renderTargetParams, 0, sizeof(SceGxmRenderTargetParams));
+            renderTargetParams.flags = 0;
+            renderTargetParams.width = w;
+            renderTargetParams.height = h;
+            renderTargetParams.scenesPerFrame = 1;
+            renderTargetParams.multisampleMode = SCE_GXM_MULTISAMPLE_NONE;
+            renderTargetParams.multisampleLocations = 0;
+            renderTargetParams.driverMemBlock = -1;
+
+            // create the render target
+            err = sceGxmCreateRenderTarget(&renderTargetParams, &tgt);
+
+            texture->gxm_rendertarget = tgt;
+
+            if (err < 0) {
+                free_gxm_texture(texture);
+                SDL_SetError("create render target failed: %d\n", err);
+                return NULL;
+            }
+        }
+    }
+
+    for (int i = 0; i < NOTIF_NUM; ++i)
+    {
+        if (!notification_busy[i])
+        {
+            notification_busy[i] = 1;
+            texture->notification_id = i;
+            texture->fragment_notif.address = notificationMem + i;
+            texture->fragment_notif.value = 1;
+            *texture->fragment_notif.address = texture->fragment_notif.value;
+            break;
+        }
+    }
+#endif
+
     return texture;
 }
 
 void gxm_init_texture_scale(const gxm_texture *texture, float x, float y, float x_scale, float y_scale)
 {
-    const float w = x_scale * gxm_texture_get_width(texture);
-    const float h = y_scale * gxm_texture_get_height(texture);
+    const int tex_w = gxm_texture_get_width(texture);
+    const int tex_h = gxm_texture_get_height(texture);
+    const float w = x_scale * tex_w;
+    const float h = y_scale * tex_h;
 
-    data->screenVertices[0].x = x;
-    data->screenVertices[0].y = y;
+    data->screenVertices[0].x = (x / VITA_GXM_SCREEN_WIDTH * 2.0f) - 1.0f;
+    data->screenVertices[0].y = (y / VITA_GXM_SCREEN_HEIGHT * 2.0f - 1.0f) * -1.0f;
     data->screenVertices[0].z = +0.5f;
     data->screenVertices[0].u = 0.0f;
     data->screenVertices[0].v = 0.0f;
 
-    data->screenVertices[1].x = x + w;
-    data->screenVertices[1].y = y;
+    data->screenVertices[1].x = (x + w) / VITA_GXM_SCREEN_WIDTH * 2.0f - 1.0f;
+    data->screenVertices[1].y = (y / VITA_GXM_SCREEN_HEIGHT * 2.0f - 1.0f) * -1.0f;
     data->screenVertices[1].z = +0.5f;
     data->screenVertices[1].u = 1.0f;
     data->screenVertices[1].v = 0.0f;
 
-    data->screenVertices[2].x = x;
-    data->screenVertices[2].y = y + h;
+    data->screenVertices[2].x = (x / VITA_GXM_SCREEN_WIDTH * 2.0f) - 1.0f;
+    data->screenVertices[2].y = ((y + h) / VITA_GXM_SCREEN_HEIGHT * 2.0f - 1.0f) * -1.0f;
     data->screenVertices[2].z = +0.5f;
     data->screenVertices[2].u = 0.0f;
     data->screenVertices[2].v = 1.0f;
 
-    data->screenVertices[3].x = x + w;
-    data->screenVertices[3].y = y + h;
+    data->screenVertices[3].x = (x + w) / VITA_GXM_SCREEN_WIDTH * 2.0f - 1.0f;
+    data->screenVertices[3].y = ((y + h) / VITA_GXM_SCREEN_HEIGHT * 2.0f - 1.0f) * -1.0f;
     data->screenVertices[3].z = +0.5f;
     data->screenVertices[3].u = 1.0f;
     data->screenVertices[3].v = 1.0f;
-
-    // Set the texture to the TEXUNIT0
-    sceGxmSetFragmentTexture(data->gxm_context, 0, &texture->gxm_tex);
-    sceGxmSetVertexStream(data->gxm_context, 0, data->screenVertices);
 }
 
 void gxm_start_drawing()
@@ -771,15 +998,7 @@ void gxm_start_drawing()
         &data->depthSurface
     );
 
-    *fragmentNotif.address = 0;
-}
-
-void gxm_draw_texture(const gxm_texture *texture)
-{
-    void *vertex_wvp_buffer;
-    sceGxmReserveVertexDefaultUniformBuffer(data->gxm_context, &vertex_wvp_buffer);
-    sceGxmSetUniformDataF(vertex_wvp_buffer, data->textureWvpParam, 0, 16, data->ortho_matrix);
-    sceGxmDraw(data->gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP, SCE_GXM_INDEX_FORMAT_U16, data->linearIndices, 4);
+    *flipFragmentNotif.address = 0;
 }
 
 void gxm_wait_rendering_done()
@@ -789,7 +1008,7 @@ void gxm_wait_rendering_done()
 
 void gxm_end_drawing()
 {
-    sceGxmEndScene(data->gxm_context, NULL, &fragmentNotif);
+    sceGxmEndScene(data->gxm_context, NULL, &flipFragmentNotif);
 }
 
 void gxm_swap_buffers()
@@ -812,7 +1031,7 @@ void gxm_swap_buffers()
 
     sceCommonDialogUpdate(&updateParam);
 
-    if (gxm_finish_wait && *fragmentNotif.address != fragmentNotif.value)
+    if (gxm_finish_wait && *flipFragmentNotif.address != flipFragmentNotif.value)
     {
         sceGxmFinish(data->gxm_context);
     }
@@ -826,6 +1045,10 @@ void gxm_swap_buffers()
     // update buffer indices
     data->frontBufferIndex = data->backBufferIndex;
     data->backBufferIndex = (data->backBufferIndex + 1) % VITA_GXM_BUFFERS;
+#ifdef VITA_HW_ACCEL
+    data->pool_index = 0;
+    data->current_pool = (data->current_pool + 1) % 2;
+#endif
 }
 
 void gxm_texture_set_filters(gxm_texture *texture, SceGxmTextureFilter min_filter, SceGxmTextureFilter mag_filter)
@@ -842,6 +1065,21 @@ void gxm_set_vblank_wait(int enable)
 void gxm_set_finish_wait(int enable)
 {
     gxm_finish_wait = enable;
+}
+
+void gxm_draw_screen_texture(gxm_texture *texture)
+{
+#ifdef VITA_HW_ACCEL
+    set_alpha_blend(0);
+#endif
+    void *vertex_wvp_buffer;
+    sceGxmSetVertexProgram(data->gxm_context, data->textureVertexProgram);
+    sceGxmSetFragmentProgram(data->gxm_context, data->textureFragmentProgram);
+    sceGxmSetVertexStream(data->gxm_context, 0, data->screenVertices);
+    sceGxmReserveVertexDefaultUniformBuffer(data->gxm_context, &vertex_wvp_buffer);
+    sceGxmSetUniformDataF(vertex_wvp_buffer, data->textureWvpParam, 0, 16, data->ortho_matrix);
+    sceGxmSetFragmentTexture(data->gxm_context, 0, &texture->gxm_tex);
+    sceGxmDraw(data->gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP, SCE_GXM_INDEX_FORMAT_U16, data->linearIndices, 4);
 }
 
 void gxm_render_clear()
@@ -865,12 +1103,147 @@ void gxm_render_clear()
     // draw the clear triangle
     sceGxmSetVertexStream(data->gxm_context, 0, data->clearVertices);
     sceGxmDraw(data->gxm_context, SCE_GXM_PRIMITIVE_TRIANGLES, SCE_GXM_INDEX_FORMAT_U16, data->linearIndices, 3);
+}
 
-    // set back the texture program
+#ifdef VITA_HW_ACCEL
+// what if locked texture is currently being read from..? probably still safer to use gxm_wait_rendering_done() for locking
+// also there's a possibility of more that 1 job is queued that may result in fired up notification while there are still jobs left to do
+// rework of notification system, sceGxmFinish or ensuring that jobs are finished before queuing new ones is probably a safer approach (and slower one)
+void gxm_lock_texture(gxm_texture *texture)
+{
+    //if(*texture->fragment_notif.address != texture->fragment_notif.value)
+    //    sceGxmFinish(data->gxm_context);
+    while(*texture->fragment_notif.address != texture->fragment_notif.value) {};
+}
+
+void gxm_fill_rect(gxm_texture *dst, SDL_Rect dstrect, float r, float g, float b, float a)
+{
+    sceGxmBeginScene(
+        data->gxm_context,
+        0,
+        dst->gxm_rendertarget,
+        NULL,
+        NULL,
+        NULL,
+        &dst->gxm_colorsurface,
+        &dst->gxm_depthstencil
+    );
+
+    *dst->fragment_notif.address = 0;
+
+    void *color_buffer;
+    float fill_color[4];
+
+    fill_color[0] = r;
+    fill_color[1] = g;
+    fill_color[2] = b;
+    fill_color[3] = a;
+
+    float tex_w = gxm_texture_get_width(dst);
+    float tex_h = gxm_texture_get_height(dst);
+
+    clear_vertex *fillVertices = pool_memalign(
+        data,
+        sizeof(clear_vertex) * 4,
+        sizeof(clear_vertex)
+    );
+
+    fillVertices[0].x = (dstrect.x / tex_w) * 2.0f - 1.0f;
+    fillVertices[0].y = ((dstrect.y / tex_h) * 2.0f - 1.0f) * -1.0f;
+
+    fillVertices[1].x = ((dstrect.x + dstrect.w) / tex_w) * 2.0f - 1.0f;
+    fillVertices[1].y = ((dstrect.y / tex_h) * 2.0f - 1.0f) * -1.0f;
+
+    fillVertices[2].x = (dstrect.x / tex_w) * 2.0f - 1.0f;
+    fillVertices[2].y = (((dstrect.y + dstrect.h) / tex_h) * 2.0f - 1.0f) * -1.0f;
+
+    fillVertices[3].x = ((dstrect.x + dstrect.w) / tex_w) * 2.0f - 1.0f;
+    fillVertices[3].y = (((dstrect.y + dstrect.h) / tex_h) * 2.0f - 1.0f) * -1.0f;
+
+    sceGxmSetVertexProgram(data->gxm_context, data->clearVertexProgram);
+    sceGxmSetFragmentProgram(data->gxm_context, data->clearFragmentProgram);
+    sceGxmReserveFragmentDefaultUniformBuffer(data->gxm_context, &color_buffer);
+    sceGxmSetUniformDataF(color_buffer, data->clearClearColorParam, 0, 4, fill_color);
+    sceGxmSetVertexStream(data->gxm_context, 0, fillVertices);
+    sceGxmDraw(data->gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP, SCE_GXM_INDEX_FORMAT_U16, data->linearIndices, 4);
+    sceGxmEndScene(data->gxm_context, NULL, &dst->fragment_notif);
+    //sceGxmFinish(data->gxm_context);
+}
+
+void gxm_blit(gxm_texture *src, SDL_Rect srcrect, gxm_texture *dst, SDL_Rect dstrect, int alpha_blit)
+{
+    sceGxmBeginScene(
+        data->gxm_context,
+        0,
+        dst->gxm_rendertarget,
+        NULL,
+        NULL,
+        NULL,
+        &dst->gxm_colorsurface,
+        &dst->gxm_depthstencil
+    );
+
+    *dst->fragment_notif.address = 0;
+
+    // works properly with centered screen surfaces ONLY
+    float src_x = srcrect.x;
+    float src_y = srcrect.y;
+    float src_w = srcrect.w;
+    float src_h = srcrect.h;
+    float src_tex_w = gxm_texture_get_width(src);
+    float src_tex_h = gxm_texture_get_height(src);
+    float dst_x = dstrect.x;
+    float dst_y = dstrect.y;
+    float dst_tex_w = gxm_texture_get_width(dst);
+    float dst_tex_h = gxm_texture_get_height(dst);
+
+    texture_vertex *blitVertices = pool_memalign(
+        data,
+        4 * sizeof(texture_vertex),
+        sizeof(texture_vertex)
+    );
+
+    blitVertices[0].x = (dst_x / dst_tex_w) * 2.0f - 1.0f;
+    blitVertices[0].y = ((dst_y / dst_tex_h) * 2.0f - 1.0f) * -1.0f;
+    blitVertices[0].z = +0.5f;
+    blitVertices[0].u = src_x / src_tex_w;
+    blitVertices[0].v = src_y / src_tex_h;
+
+    blitVertices[1].x = ((dst_x + src_w) / dst_tex_w) * 2.0f - 1.0f;
+    blitVertices[1].y = ((dst_y / dst_tex_h) * 2.0f - 1.0f) * -1.0f;
+    blitVertices[1].z = +0.5f;
+    blitVertices[1].u = (src_x + src_w) / src_tex_w;
+    blitVertices[1].v = src_y / src_tex_h;
+
+    blitVertices[2].x = (dst_x / dst_tex_w) * 2.0f - 1.0f;
+    blitVertices[2].y = (((dst_y + src_h) / dst_tex_h) * 2.0f - 1.0f) * -1.0f;
+    blitVertices[2].z = +0.5f;
+    blitVertices[2].u = src_x / src_tex_w;
+    blitVertices[2].v = (src_y + src_h) / src_tex_h;
+
+    blitVertices[3].x = ((dst_x + src_w) / dst_tex_w) * 2.0f - 1.0f;
+    blitVertices[3].y = (((dst_y + src_h) / dst_tex_h) * 2.0f - 1.0f) * -1.0f;
+    blitVertices[3].z = +0.5f;
+    blitVertices[3].u = (src_x + src_w) / src_tex_w;
+    blitVertices[3].v = (src_y + src_h) / src_tex_h;
+
+    set_alpha_blend(alpha_blit);
+
+    void *vertex_wvp_buffer;
     sceGxmSetVertexProgram(data->gxm_context, data->textureVertexProgram);
     sceGxmSetFragmentProgram(data->gxm_context, data->textureFragmentProgram);
-    sceGxmSetVertexStream(data->gxm_context, 0, data->screenVertices);
+
+    sceGxmSetFragmentTexture(data->gxm_context, 0, &src->gxm_tex);
+    sceGxmSetVertexStream(data->gxm_context, 0, blitVertices);
+    sceGxmReserveVertexDefaultUniformBuffer(data->gxm_context, &vertex_wvp_buffer);
+
+    sceGxmSetUniformDataF(vertex_wvp_buffer, data->textureWvpParam, 0, 16, data->ortho_matrix);
+    sceGxmDraw(data->gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP, SCE_GXM_INDEX_FORMAT_U16, data->linearIndices, 4);
+
+    sceGxmEndScene(data->gxm_context, NULL, &dst->fragment_notif);
+    //sceGxmFinish(data->gxm_context);
 }
+#endif
 
 static unsigned int back_buffer_index_for_common_dialog = 0;
 static unsigned int front_buffer_index_for_common_dialog = 0;

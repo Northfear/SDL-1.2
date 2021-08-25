@@ -3,15 +3,28 @@
 ## Features
 
 - 1.2.16 version bump
-- Up to 20% faster vs vita2d version
-- Lower memory usage
-- Working 32 bpp
+- Support of 8/15/16/24/32 bit surfaces
+- Harware accelerated blits and fills
 - Front touchpad support (Mouse emulation. Works with scaled/centered images)
 - Custom functions for on screen keyboard and message box (Backported from SDL2 Vita port)
 
 ## Build instructions
 
+To build and install SDL 1.2 use the following command
+
 ```make -f Makefile.vita install```
+
+TO enable hardware acceleration use ```VITA_HW_ACCEL=1``` flag
+
+```make -f Makefile.vita VITA_HW_ACCEL=1 install```
+
+You can choose which functions are accelerated by using following flags together with ```VITA_HW_ACCEL=1```.
+
+`VITA_BLIT_HW=1` Enables accelerated blits (enabled by default).
+
+`VITA_BLIT_HW_A=1` Enables accelerated alpha blits (somewhat limited functionality, disabled by default).
+
+`VITA_FILL_HW=1` Enables accelerated fills (enabled by default).
 
 ## Custom functions
 
@@ -57,7 +70,11 @@ Set ```SDL_VITA_SetWaitGxmFinish(0)``` unless you experience visual bugs (tearin
 
 Hardware surfaces with memblock type ```SCE_KERNEL_MEMBLOCK_TYPE_USER_RW``` or ```SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE``` can provide better performance is case of big number of CPU read/writes on the surface.
 
-Generally performance of ```SDL_SWSURFACE``` and ```SDL_HWSURFACE``` is roughly the same (hardware blit is not implemented).
+Generally performance of ```SDL_HWSURFACE``` is somewhat faster with hardware acceleration enabled.
+
+Alpha blits are disabled by default. They are functional with 32 bpp surfaces, but `SDL_SetAlpha` is currently not implemented and blits may produce a bit different results than expected in some cases.
+
+HW acceleration is disabled with 8-bit surfaces.
 
 ## Thanks to:
 - isage for [SDL2 gxm port](https://github.com/isage/SDL-mirror)

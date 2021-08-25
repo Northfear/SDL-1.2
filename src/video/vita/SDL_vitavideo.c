@@ -76,6 +76,14 @@ static int VITA_LockHWSurface(_THIS, SDL_Surface *surface);
 static void VITA_UnlockHWSurface(_THIS, SDL_Surface *surface);
 static void VITA_FreeHWSurface(_THIS, SDL_Surface *surface);
 
+#ifdef VITA_HW_ACCEL
+static int VITA_FillHWRect(_THIS, SDL_Surface *dst, SDL_Rect *dstrect, Uint32 color);
+static int VITA_CheckHWBlit(_THIS, SDL_Surface *src, SDL_Surface *dst);
+static int VITA_HWAccelBlit(SDL_Surface *src, SDL_Rect *srcrect, SDL_Surface *dst, SDL_Rect *dstrect);
+static int VITA_SetHWAlpha(_THIS, SDL_Surface *surface, Uint8 alpha);
+static int VITA_SetHWColorKey(_THIS, SDL_Surface *src, Uint32 key);
+#endif
+
 /* etc. */
 static void VITA_UpdateRects(_THIS, int numrects, SDL_Rect *rects);
 
@@ -114,10 +122,17 @@ static SDL_VideoDevice *VITA_CreateDevice(int devindex)
     device->UpdateRects = VITA_UpdateRects;
     device->VideoQuit = VITA_VideoQuit;
     device->AllocHWSurface = VITA_AllocHWSurface;
+#ifdef VITA_HW_ACCEL
+    device->CheckHWBlit = VITA_CheckHWBlit;
+    device->FillHWRect = VITA_FillHWRect;
+    device->SetHWColorKey = VITA_SetHWColorKey;
+    device->SetHWAlpha = VITA_SetHWAlpha;
+#else
     device->CheckHWBlit = NULL;
     device->FillHWRect = NULL;
     device->SetHWColorKey = NULL;
     device->SetHWAlpha = NULL;
+#endif
     device->LockHWSurface = VITA_LockHWSurface;
     device->UnlockHWSurface = VITA_UnlockHWSurface;
     device->FlipHWSurface = VITA_FlipHWSurface;
@@ -148,6 +163,17 @@ static void VITA_DeleteDevice(SDL_VideoDevice *device)
 
 int VITA_VideoInit(_THIS, SDL_PixelFormat *vformat)
 {
+    this->info.hw_available = 1;
+    this->info.blit_hw = VITA_BLIT_HW;
+    this->info.blit_hw_CC = 0;
+    // blit_hw_A is semi-functional. 32 blits onto 32 surfaces are working
+    // transparent blits (8 bit ones???) onto non-transparent surface (16 bit) result into black images
+    this->info.blit_hw_A = VITA_BLIT_HW_A;
+    this->info.blit_sw = VITA_BLIT_HW;
+    this->info.blit_sw_CC = 0;
+    this->info.blit_sw_A = VITA_BLIT_HW_A;
+    this->info.blit_fill = VITA_FILL_HW;
+
     if (gxm_init() != 0)
     {
         return -1;
@@ -174,6 +200,7 @@ SDL_Rect **VITA_ListModes(_THIS, SDL_PixelFormat *format, Uint32 flags)
         {0, 0, 320, 200},
         {0, 0, 480, 272},
         {0, 0, 640, 400},
+        {0, 0, 640, 480},
         {0, 0, 960, 544},
     };
     static SDL_Rect *VITA_modes[] = {
@@ -181,12 +208,15 @@ SDL_Rect **VITA_ListModes(_THIS, SDL_PixelFormat *format, Uint32 flags)
         &VITA_Rects[1],
         &VITA_Rects[2],
         &VITA_Rects[3],
+        &VITA_Rects[4],
         NULL
     };
     SDL_Rect **modes = VITA_modes;
 
     switch(format->BitsPerPixel)
     {
+        case 8:
+        case 15:
         case 16:
         case 24:
         case 32:
@@ -202,6 +232,22 @@ SDL_Surface *VITA_SetVideoMode(_THIS, SDL_Surface *current,
 {
     switch(bpp)
     {
+        case 8:
+            if (!SDL_ReallocFormat(current, 8, 0, 0, 0, 0))
+            {
+                SDL_SetError("Couldn't allocate new pixel format for requested mode");
+                return(NULL);
+            }
+        break;
+
+        case 15:
+            if (!SDL_ReallocFormat(current, 15, 0x7C00, 0x03E0, 0x001F, 0x0000))
+            {
+                SDL_SetError("Couldn't allocate new pixel format for requested mode");
+                return(NULL);
+            }
+        break;
+
         case 16:
         break;
 
@@ -214,7 +260,7 @@ SDL_Surface *VITA_SetVideoMode(_THIS, SDL_Surface *current,
         break;
 
         case 32:
-            if (!SDL_ReallocFormat(current, 32, 0x000000FF, 0x0000FF00, 0x00FF0000, 0xFF000000))
+            if (!SDL_ReallocFormat(current, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000))
             {
                 SDL_SetError("Couldn't allocate new pixel format for requested mode");
                 return(NULL);
@@ -281,6 +327,16 @@ static int VITA_AllocHWSurface(_THIS, SDL_Surface *surface)
 
     switch(surface->format->BitsPerPixel)
     {
+        case 8:
+            surface->hwdata->texture =
+                create_gxm_texture(surface->w, surface->h, SCE_GXM_TEXTURE_FORMAT_P8_ABGR);
+        break;
+
+        case 15:
+            surface->hwdata->texture =
+                create_gxm_texture(surface->w, surface->h, SCE_GXM_TEXTURE_FORMAT_A1R5G5B5);
+        break;
+
         case 16:
             surface->hwdata->texture =
                 create_gxm_texture(surface->w, surface->h, SCE_GXM_TEXTURE_FORMAT_R5G6B5);
@@ -293,7 +349,7 @@ static int VITA_AllocHWSurface(_THIS, SDL_Surface *surface)
 
         case 32:
             surface->hwdata->texture =
-                create_gxm_texture(surface->w, surface->h, SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ABGR);
+                create_gxm_texture(surface->w, surface->h, SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ARGB);
         break;
 
         default:
@@ -301,14 +357,26 @@ static int VITA_AllocHWSurface(_THIS, SDL_Surface *surface)
         return -1;
     }
 
+    if (!surface->hwdata->texture) {
+        SDL_free(surface->hwdata);
+        SDL_OutOfMemory();
+        return -1;
+    }
+
     surface->pixels = gxm_texture_get_datap(surface->hwdata->texture);
     surface->pitch = gxm_texture_get_stride(surface->hwdata->texture);
+
+    // need this for somewhat working 8bit HW blit (looks like there's no HW specific SetPalette)
+    // shouldn't free colors with it in SDL_FreeFormat tho (crashes)
+    //if(surface->format->BitsPerPixel == 8) {
+    //    surface->format->palette->colors = gxm_texture_get_palette(surface->hwdata->texture);
+    //}
+
     // Don't force SDL_HWSURFACE. Screen surface still works as SDL_SWSURFACE (but may require sceGxmFinish on flip)
     // Mixing SDL_HWSURFACE and SDL_SWSURFACE drops fps by 10% or so
     // Not sure if there's even a point of having anything as SDL_HWSURFACE
     // UPD: Yeah, there's a point is some cases (like weird bugs with 32 bits with SW or HW only surfaces in gemrb)
     //surface->flags |= SDL_HWSURFACE;
-
     return(0);
 }
 
@@ -326,6 +394,11 @@ static void VITA_FreeHWSurface(_THIS, SDL_Surface *surface)
 
 static int VITA_LockHWSurface(_THIS, SDL_Surface *surface)
 {
+#ifdef VITA_HW_ACCEL
+    // texture might be accessed by gxm right now
+    // so we should finish rendering before messing it up
+    gxm_lock_texture(surface->hwdata->texture);
+#endif
     return(0);
 }
 
@@ -342,10 +415,156 @@ static int VITA_FlipHWSurface(_THIS, SDL_Surface *surface)
         // clear to avoid leftovers from previous frames (when rendering non native resolutions)
         gxm_render_clear();
     }
-    gxm_draw_texture(surface->hwdata->texture);
+    gxm_draw_screen_texture(surface->hwdata->texture);
     gxm_end_drawing();
     gxm_swap_buffers();
 }
+
+#ifdef VITA_HW_ACCEL
+static int VITA_FillHWRect(_THIS, SDL_Surface *dst, SDL_Rect *dstrect, Uint32 color)
+{
+    SDL_Rect dst_rect;
+    gxm_texture *dst_texture = dst->hwdata->texture;
+
+    if (dstrect == NULL)
+    {
+        dst_rect.x = 0;
+        dst_rect.y = 0;
+        dst_rect.w = gxm_texture_get_width(dst_texture);
+        dst_rect.h = gxm_texture_get_height(dst_texture);
+    }
+    else
+    {
+        dst_rect = *dstrect;
+    }
+
+    // fallback to SW fill with 8 bit surface
+    // also fallback to SW for small blits
+    const int min_blit_size = 1024;
+    if (dst->format->BitsPerPixel == 8 || dst_rect.w * dst_rect.h <= min_blit_size)
+    {
+        Uint8 *row = (Uint8 *)dst->pixels+dstrect->y*dst->pitch+
+                dstrect->x*dst->format->BytesPerPixel;
+
+        if (dst->format->BytesPerPixel != 3) {
+            void FillRect8ARMNEONAsm(int32_t w, int32_t h, uint8_t *dst, int32_t dst_stride, uint8_t src);
+            void FillRect16ARMNEONAsm(int32_t w, int32_t h, uint16_t *dst, int32_t dst_stride, uint16_t src);
+            void FillRect32ARMNEONAsm(int32_t w, int32_t h, uint32_t *dst, int32_t dst_stride, uint32_t src);
+            switch (dst->format->BytesPerPixel) {
+            case 1:
+                FillRect8ARMNEONAsm(dstrect->w, dstrect->h, (uint8_t *) row, dst->pitch >> 0, color);
+                break;
+            case 2:
+                FillRect16ARMNEONAsm(dstrect->w, dstrect->h, (uint16_t *) row, dst->pitch >> 1, color);
+                break;
+            case 4:
+                FillRect32ARMNEONAsm(dstrect->w, dstrect->h, (uint32_t *) row, dst->pitch >> 2, color);
+                break;
+            }
+            return(0);
+        }
+    }
+
+    SDL_PixelFormat *fmt = dst->format;
+    float a = ((color & fmt->Amask) >> (fmt->Ashift - fmt->Aloss)) / 255.0f;
+    float r = ((color & fmt->Rmask) >> (fmt->Rshift - fmt->Rloss)) / 255.0f;
+    float g = ((color & fmt->Gmask) >> (fmt->Gshift - fmt->Gloss)) / 255.0f;
+    float b = ((color & fmt->Bmask) << (fmt->Bloss - fmt->Bshift)) / 255.0f;
+
+    gxm_fill_rect(dst_texture, *dstrect, r, g, b, a);
+    return(0);
+}
+
+static int VITA_CheckHWBlit(_THIS, SDL_Surface *src, SDL_Surface *dst)
+{
+    // make sure that drawing is finished on HW surface before doing software blit on it
+    if (!src->hwdata && dst->hwdata)
+    {
+        gxm_lock_texture(dst->hwdata->texture);
+        return 0;
+    }
+
+    // no hw blit for paletted surfaces for now (it ends up being messed up)
+    if (src->format->BitsPerPixel == 8 || dst->format->BitsPerPixel == 8)
+        return 0;
+
+    int accelerated;
+
+    // Set initial acceleration on
+    src->flags |= SDL_HWACCEL;
+
+    // Set the surface attributes
+    if ((src->flags & SDL_SRCALPHA) == SDL_SRCALPHA)
+    {
+        if (!this->info.blit_hw_A)
+        {
+            src->flags &= ~SDL_HWACCEL;
+        }
+    }
+    if ((src->flags & SDL_SRCCOLORKEY) == SDL_SRCCOLORKEY)
+    {
+        if (!this->info.blit_hw_CC)
+        {
+            src->flags &= ~SDL_HWACCEL;
+        }
+    }
+
+    // Check to see if final surface blit is accelerated
+    accelerated = !!(src->flags & SDL_HWACCEL);
+    if (accelerated)
+    {
+        src->map->hw_blit = VITA_HWAccelBlit;
+    }
+    return(accelerated);
+}
+
+static int VITA_HWAccelBlit(SDL_Surface *src, SDL_Rect *srcrect, SDL_Surface *dst, SDL_Rect *dstrect)
+{
+    gxm_texture *src_texture = src->hwdata->texture;
+    gxm_texture *dst_texture = dst->hwdata->texture;
+    SDL_Rect src_rect;
+    SDL_Rect dst_rect;
+
+    if (srcrect == NULL)
+    {
+        src_rect.x = 0;
+        src_rect.y = 0;
+        src_rect.w = gxm_texture_get_width(src_texture);
+        src_rect.h = gxm_texture_get_height(src_texture);
+    }
+    else
+    {
+        src_rect = *srcrect;
+    }
+
+    if (dstrect == NULL)
+    {
+        dst_rect.x = 0;
+        dst_rect.y = 0;
+    }
+    else
+    {
+        dst_rect = *dstrect;
+    }
+
+    int alpha_blit = ((src->flags & SDL_SRCALPHA) == SDL_SRCALPHA) ? 1 : 0;
+    gxm_blit(src_texture, src_rect, dst_texture, dst_rect, alpha_blit);
+
+    return(0);
+}
+
+static int VITA_SetHWAlpha(_THIS, SDL_Surface *surface, Uint8 alpha)
+{
+    // TODO
+    return 0;
+}
+
+static int VITA_SetHWColorKey(_THIS, SDL_Surface *src, Uint32 key)
+{
+    // TODO
+    return 0;
+}
+#endif
 
 static void VITA_UpdateRects(_THIS, int numrects, SDL_Rect *rects)
 {
@@ -353,6 +572,10 @@ static void VITA_UpdateRects(_THIS, int numrects, SDL_Rect *rects)
 
 int VITA_SetColors(_THIS, int firstcolor, int ncolors, SDL_Color *colors)
 {
+    void *palette_ptr = gxm_texture_get_palette(this->screen->hwdata->texture);
+    if (palette_ptr != NULL) {
+        SDL_memcpy(palette_ptr + sizeof(uint32_t) * firstcolor, colors, sizeof(uint32_t) * ncolors);
+    }
     return(1);
 }
 
@@ -435,7 +658,7 @@ void SDL_VITA_SetTextureAllocMemblockType(SceKernelMemBlockType type)
     gxm_texture_set_alloc_memblock_type(type);
 }
 
-// custom psp2 function that returns main surface rect and scaled rect (used in touch emulation)
+// custom vita function that returns main surface rect and scaled rect (used in touch emulation)
 void SDL_VITA_GetSurfaceRect(SDL_Rect *surfaceRect, SDL_Rect *scaledRect)
 {
     SDL_Surface *surface = SDL_VideoSurface;
