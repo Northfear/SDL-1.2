@@ -14,7 +14,7 @@ To build and install SDL 1.2 use the following command
 
 ```make -f Makefile.vita install```
 
-TO enable hardware acceleration use ```VITA_HW_ACCEL=1``` flag
+To enable hardware acceleration use ```VITA_HW_ACCEL=1``` flag
 
 ```make -f Makefile.vita VITA_HW_ACCEL=1 install```
 

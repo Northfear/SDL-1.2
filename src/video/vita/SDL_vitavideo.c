@@ -21,21 +21,6 @@
 */
 #include "SDL_config.h"
 
-/* VITA SDL video driver implementation; this is just enough to make an
- *  SDL-based application THINK it's got a working video driver, for
- *  applications that call SDL_Init(SDL_INIT_VIDEO) when they don't need it,
- *  and also for use as a collection of stubs when porting SDL to a new
- *  platform for which you haven't yet written a valid video driver.
- *
- * This is also a great way to determine bottlenecks: if you think that SDL
- *  is a performance problem for a given platform, enable this driver, and
- *  then see if your application runs faster without video overhead.
- *
- * Initial work by Ryan C. Gordon (icculus@icculus.org). A good portion
- *  of this was cut-and-pasted from Stephane Peter's work in the AAlib
- *  SDL video driver.  Renamed to "DUMMY" by Sam Lantinga.
- */
-
 #include "SDL_video.h"
 #include "SDL_mouse.h"
 #include "../SDL_sysvideo.h"
@@ -167,7 +152,7 @@ int VITA_VideoInit(_THIS, SDL_PixelFormat *vformat)
     this->info.blit_hw = VITA_BLIT_HW;
     this->info.blit_hw_CC = 0;
     // blit_hw_A is semi-functional. 32 blits onto 32 surfaces are working
-    // transparent blits (8 bit ones???) onto non-transparent surface (16 bit) result into black images
+    // transparent blits (8 bit ones???) onto non-transparent surface (16 bit) might result in black images
     this->info.blit_hw_A = VITA_BLIT_HW_A;
     this->info.blit_sw = VITA_BLIT_HW;
     this->info.blit_sw_CC = 0;
@@ -372,11 +357,11 @@ static int VITA_AllocHWSurface(_THIS, SDL_Surface *surface)
     //    surface->format->palette->colors = gxm_texture_get_palette(surface->hwdata->texture);
     //}
 
-    // Don't force SDL_HWSURFACE. Screen surface still works as SDL_SWSURFACE (but may require sceGxmFinish on flip)
+    // Don't force SDL_HWSURFACE with SW rendering. Screen surface still works as SDL_SWSURFACE (but may require sceGxmFinish on flip)
     // Mixing SDL_HWSURFACE and SDL_SWSURFACE drops fps by 10% or so
     // Not sure if there's even a point of having anything as SDL_HWSURFACE
     // UPD: Yeah, there's a point is some cases (like weird bugs with 32 bits with SW or HW only surfaces in gemrb)
-    //surface->flags |= SDL_HWSURFACE;
+    surface->flags |= SDL_HWSURFACE;
     return(0);
 }
 
@@ -438,8 +423,8 @@ static int VITA_FillHWRect(_THIS, SDL_Surface *dst, SDL_Rect *dstrect, Uint32 co
         dst_rect = *dstrect;
     }
 
-    // fallback to SW fill with 8 bit surface
-    // also fallback to SW for small blits
+    // fallback to SW fill with 8 bit surfaces
+    // also fallback to SW for smaller fills
     const int min_blit_size = 1024;
     if (dst->format->BitsPerPixel == 8 || dst_rect.w * dst_rect.h <= min_blit_size)
     {

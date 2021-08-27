@@ -523,7 +523,7 @@ int gxm_init()
         data->clearVertices[2].y =  3.0f;
     }
 
-    // Allocate a 64k * 2 bytes = 128 KiB buffer and store all possible
+    // Allocate a 4 * 2 bytes = 8 bytes buffer and store all possible
     // 16-bit indices in linear ascending order, so we can use this for
     // all drawing operations where we don't want to use indexing.
     data->linearIndices = (uint16_t *)mem_gpu_alloc(
@@ -936,7 +936,9 @@ gxm_texture* create_gxm_texture(unsigned int w, unsigned int h, SceGxmTextureFor
         }
     }
 
-    for (int i = 0; i < NOTIF_NUM; ++i)
+    int free_notification_found = 0;
+    // notification 0 is reserved for screen flip
+    for (int i = 1; i < NOTIF_NUM; ++i)
     {
         if (!notification_busy[i])
         {
@@ -945,9 +947,13 @@ gxm_texture* create_gxm_texture(unsigned int w, unsigned int h, SceGxmTextureFor
             texture->fragment_notif.address = notificationMem + i;
             texture->fragment_notif.value = 1;
             *texture->fragment_notif.address = texture->fragment_notif.value;
+            free_notification_found = 1;
             break;
         }
     }
+
+    if (!free_notification_found)
+        SDL_SetError("Out of free notification!\n");
 #endif
 
     return texture;
@@ -1031,9 +1037,9 @@ void gxm_swap_buffers()
 
     sceCommonDialogUpdate(&updateParam);
 
-    if (gxm_finish_wait && *flipFragmentNotif.address != flipFragmentNotif.value)
+    if (gxm_finish_wait)
     {
-        sceGxmFinish(data->gxm_context);
+        sceGxmNotificationWait(&flipFragmentNotif);
     }
 
     sceGxmDisplayQueueAddEntry(
@@ -1107,17 +1113,19 @@ void gxm_render_clear()
 
 #ifdef VITA_HW_ACCEL
 // what if locked texture is currently being read from..? probably still safer to use gxm_wait_rendering_done() for locking
-// also there's a possibility of more that 1 job is queued that may result in fired up notification while there are still jobs left to do
+// also there's a possibility of more than 1 queued job that may result in fired up notification while there are still jobs left to do
 // rework of notification system, sceGxmFinish or ensuring that jobs are finished before queuing new ones is probably a safer approach (and slower one)
 void gxm_lock_texture(gxm_texture *texture)
 {
     //if(*texture->fragment_notif.address != texture->fragment_notif.value)
     //    sceGxmFinish(data->gxm_context);
-    while(*texture->fragment_notif.address != texture->fragment_notif.value) {};
+    sceGxmNotificationWait(&texture->fragment_notif);
 }
 
 void gxm_fill_rect(gxm_texture *dst, SDL_Rect dstrect, float r, float g, float b, float a)
 {
+    //sceGxmNotificationWait(&dst->fragment_notif);
+
     sceGxmBeginScene(
         data->gxm_context,
         0,
@@ -1172,6 +1180,9 @@ void gxm_fill_rect(gxm_texture *dst, SDL_Rect dstrect, float r, float g, float b
 
 void gxm_blit(gxm_texture *src, SDL_Rect srcrect, gxm_texture *dst, SDL_Rect dstrect, int alpha_blit)
 {
+    //sceGxmNotificationWait(&src->fragment_notif);
+    //sceGxmNotificationWait(&dst->fragment_notif);
+
     sceGxmBeginScene(
         data->gxm_context,
         0,
@@ -1185,7 +1196,6 @@ void gxm_blit(gxm_texture *src, SDL_Rect srcrect, gxm_texture *dst, SDL_Rect dst
 
     *dst->fragment_notif.address = 0;
 
-    // works properly with centered screen surfaces ONLY
     float src_x = srcrect.x;
     float src_y = srcrect.y;
     float src_w = srcrect.w;
