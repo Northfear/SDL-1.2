@@ -31,8 +31,12 @@
 #include "SDL_error.h"
 
 #include "SDL_render_vita_gxm_tools.h"
-#include "SDL_render_vita_gxm_memory.h"
 #include "SDL_render_vita_gxm_shaders.h"
+#include "mem_utils.h"
+
+#include <psp2/kernel/clib.h>
+
+#define MAX_SCENES_PER_FRAME 8
 
 VITA_GXM_RenderData *data;
 static SceKernelMemBlockType textureMemBlockType = SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW;
@@ -41,7 +45,7 @@ volatile unsigned int *notificationMem;
 SceGxmNotification flipFragmentNotif;
 
 #ifdef VITA_HW_ACCEL
-#define NOTIF_NUM 1024
+#define NOTIF_NUM 512
 int notification_busy[NOTIF_NUM];
 #endif
 
@@ -134,6 +138,38 @@ static void free_fragment_programs(VITA_GXM_RenderData *data, fragment_programs 
 }
 
 #ifdef VITA_HW_ACCEL
+SceGxmTransferFormat gxm_texture_get_transferformat(const gxm_texture *texture)
+{
+    SceGxmTextureFormat texFormat = gxm_texture_get_format(texture);
+    SceGxmTransferFormat transferFormat = SCE_GXM_TRANSFER_FORMAT_RAW16;
+
+    switch (texFormat)
+    {
+        case SCE_GXM_TEXTURE_FORMAT_P8_ABGR:
+            transferFormat = SCE_GXM_TRANSFER_FORMAT_U8_R;
+            break;
+        case SCE_GXM_TEXTURE_FORMAT_A1R5G5B5:
+            transferFormat = SCE_GXM_TRANSFER_FORMAT_RAW16;
+            break;
+        case SCE_GXM_TEXTURE_FORMAT_R5G6B5:
+            transferFormat = SCE_GXM_TRANSFER_FORMAT_U5U6U5_BGR;
+            break;
+        case SCE_GXM_TEXTURE_FORMAT_U8U8U8_RGB:
+            transferFormat = SCE_GXM_TRANSFER_FORMAT_U8U8U8_BGR;
+            break;
+        case SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ARGB:
+            transferFormat = SCE_GXM_TRANSFER_FORMAT_U8U8U8U8_ABGR;
+            break;
+        case SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ABGR:
+            transferFormat = SCE_GXM_TRANSFER_FORMAT_U8U8U8U8_ABGR;
+            break;
+        default:
+            SDL_SetError("Invalid texture format!\n");
+            break;
+    }
+    return transferFormat;
+}
+
 static void set_alpha_blend(int blend_enabled)
 {
     fragment_programs *in;
@@ -211,44 +247,36 @@ int gxm_init()
         return err;
     }
 
+    SceKernelFreeMemorySizeInfo info;
+    info.size = sizeof(SceKernelFreeMemorySizeInfo);
+    sceKernelGetFreeMemorySize(&info);
+    int ram_threshold = 0x1000000;
+    int cdram_threshold = 256 * 1024;
+    int phycont_threshold = 1 * 1024 * 1024;
+    size_t ram_size = info.size_user > ram_threshold ? info.size_user - ram_threshold : info.size_user;
+    size_t cdram_size = info.size_cdram > cdram_threshold ? info.size_cdram - cdram_threshold : 0;
+    size_t phycont_size = info.size_phycont > phycont_threshold ? info.size_phycont - phycont_threshold : 0;
+
+    vgl_mem_init(ram_size, cdram_size, phycont_size);
+
     // allocate ring buffer memory using default sizes
-    void *vdmRingBuffer = mem_gpu_alloc(
-        SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE,
-        SCE_GXM_DEFAULT_VDM_RING_BUFFER_SIZE,
-        4,
-        SCE_GXM_MEMORY_ATTRIB_READ,
-        &data->vdmRingBufferUid);
-
-    void *vertexRingBuffer = mem_gpu_alloc(
-        SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE,
-        SCE_GXM_DEFAULT_VERTEX_RING_BUFFER_SIZE,
-        4,
-        SCE_GXM_MEMORY_ATTRIB_READ,
-        &data->vertexRingBufferUid);
-
-    void *fragmentRingBuffer = mem_gpu_alloc(
-        SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE,
-        SCE_GXM_DEFAULT_FRAGMENT_RING_BUFFER_SIZE,
-        4,
-        SCE_GXM_MEMORY_ATTRIB_READ,
-        &data->fragmentRingBufferUid);
+    data->vdmRingBuffer = gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_VDM_RING_BUFFER_SIZE, VGL_MEM_RAM);
+    data->vertexRingBuffer = gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_VERTEX_RING_BUFFER_SIZE, VGL_MEM_RAM);
+    data->fragmentRingBuffer = gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_FRAGMENT_RING_BUFFER_SIZE, VGL_MEM_RAM);
 
     unsigned int fragmentUsseRingBufferOffset;
-    void *fragmentUsseRingBuffer = mem_fragment_usse_alloc(
-        SCE_GXM_DEFAULT_FRAGMENT_USSE_RING_BUFFER_SIZE,
-        &data->fragmentUsseRingBufferUid,
-        &fragmentUsseRingBufferOffset);
+    data->fragmentUsseRingBuffer = gpu_fragment_usse_alloc_mapped(SCE_GXM_DEFAULT_FRAGMENT_USSE_RING_BUFFER_SIZE, &fragmentUsseRingBufferOffset);
 
     SDL_memset(&data->contextParams, 0, sizeof(SceGxmContextParams));
     data->contextParams.hostMem                       = SDL_malloc(SCE_GXM_MINIMUM_CONTEXT_HOST_MEM_SIZE);
     data->contextParams.hostMemSize                   = SCE_GXM_MINIMUM_CONTEXT_HOST_MEM_SIZE;
-    data->contextParams.vdmRingBufferMem              = vdmRingBuffer;
+    data->contextParams.vdmRingBufferMem              = data->vdmRingBuffer;
     data->contextParams.vdmRingBufferMemSize          = SCE_GXM_DEFAULT_VDM_RING_BUFFER_SIZE;
-    data->contextParams.vertexRingBufferMem           = vertexRingBuffer;
+    data->contextParams.vertexRingBufferMem           = data->vertexRingBuffer;
     data->contextParams.vertexRingBufferMemSize       = SCE_GXM_DEFAULT_VERTEX_RING_BUFFER_SIZE;
-    data->contextParams.fragmentRingBufferMem         = fragmentRingBuffer;
+    data->contextParams.fragmentRingBufferMem         = data->fragmentRingBuffer;
     data->contextParams.fragmentRingBufferMemSize     = SCE_GXM_DEFAULT_FRAGMENT_RING_BUFFER_SIZE;
-    data->contextParams.fragmentUsseRingBufferMem     = fragmentUsseRingBuffer;
+    data->contextParams.fragmentUsseRingBufferMem     = data->fragmentUsseRingBuffer;
     data->contextParams.fragmentUsseRingBufferMemSize = SCE_GXM_DEFAULT_FRAGMENT_USSE_RING_BUFFER_SIZE;
     data->contextParams.fragmentUsseRingBufferOffset  = fragmentUsseRingBufferOffset;
 
@@ -264,7 +292,7 @@ int gxm_init()
     renderTargetParams.flags                = 0;
     renderTargetParams.width                = VITA_GXM_SCREEN_WIDTH;
     renderTargetParams.height               = VITA_GXM_SCREEN_HEIGHT;
-    renderTargetParams.scenesPerFrame       = 1;
+    renderTargetParams.scenesPerFrame       = MAX_SCENES_PER_FRAME;
     renderTargetParams.multisampleMode      = 0;
     renderTargetParams.multisampleLocations = 0;
     renderTargetParams.driverMemBlock       = -1; // Invalid UID
@@ -280,12 +308,7 @@ int gxm_init()
     for (i = 0; i < VITA_GXM_BUFFERS; i++) {
 
         // allocate memory for display
-        data->displayBufferData[i] = mem_gpu_alloc(
-            SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW,
-            4 * VITA_GXM_SCREEN_STRIDE * VITA_GXM_SCREEN_HEIGHT,
-            SCE_GXM_COLOR_SURFACE_ALIGNMENT,
-            SCE_GXM_MEMORY_ATTRIB_READ | SCE_GXM_MEMORY_ATTRIB_WRITE,
-            &data->displayBufferUid[i]);
+        data->displayBufferData[i] = gpu_alloc_mapped_aligned(16*1024, 4 * VITA_GXM_SCREEN_STRIDE * VITA_GXM_SCREEN_HEIGHT, VGL_MEM_VRAM);
 
         // memset the buffer to black
         SDL_memset(data->displayBufferData[i], 0, VITA_GXM_SCREEN_HEIGHT * VITA_GXM_SCREEN_STRIDE * 4);
@@ -324,20 +347,10 @@ int gxm_init()
     unsigned int depthStrideInSamples = alignedWidth;
 
     // allocate the depth buffer
-    data->depthBufferData = mem_gpu_alloc(
-        SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE,
-        4 * sampleCount,
-        SCE_GXM_DEPTHSTENCIL_SURFACE_ALIGNMENT,
-        SCE_GXM_MEMORY_ATTRIB_READ | SCE_GXM_MEMORY_ATTRIB_WRITE,
-        &data->depthBufferUid);
+    data->depthBufferData = gpu_alloc_mapped_aligned(SCE_GXM_DEPTHSTENCIL_SURFACE_ALIGNMENT, 4 * sampleCount, VGL_MEM_RAM);
 
     // allocate the stencil buffer
-    data->stencilBufferData = mem_gpu_alloc(
-        SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE,
-        4 * sampleCount,
-        SCE_GXM_DEPTHSTENCIL_SURFACE_ALIGNMENT,
-        SCE_GXM_MEMORY_ATTRIB_READ | SCE_GXM_MEMORY_ATTRIB_WRITE,
-        &data->stencilBufferUid);
+    data->stencilBufferData = gpu_alloc_mapped_aligned(SCE_GXM_DEPTHSTENCIL_SURFACE_ALIGNMENT, 4 * sampleCount, VGL_MEM_RAM);
 
     // create the SceGxmDepthStencilSurface structure
     err = sceGxmDepthStencilSurfaceInit(
@@ -367,24 +380,13 @@ int gxm_init()
     const unsigned int patcherFragmentUsseSize  = 64*1024;
 
     // allocate memory for buffers and USSE code
-    void *patcherBuffer = mem_gpu_alloc(
-        SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE,
-        patcherBufferSize,
-        4,
-        SCE_GXM_MEMORY_ATTRIB_READ | SCE_GXM_MEMORY_ATTRIB_WRITE,
-        &data->patcherBufferUid);
+    data->patcherBuffer = gpu_alloc_mapped_aligned(4096, patcherBufferSize, VGL_MEM_RAM);
 
     unsigned int patcherVertexUsseOffset;
-    void *patcherVertexUsse = mem_vertex_usse_alloc(
-        patcherVertexUsseSize,
-        &data->patcherVertexUsseUid,
-        &patcherVertexUsseOffset);
+    data->patcherVertexUsse = gpu_vertex_usse_alloc_mapped(patcherVertexUsseSize, &patcherVertexUsseOffset);
 
     unsigned int patcherFragmentUsseOffset;
-    void *patcherFragmentUsse = mem_fragment_usse_alloc(
-        patcherFragmentUsseSize,
-        &data->patcherFragmentUsseUid,
-        &patcherFragmentUsseOffset);
+    data->patcherFragmentUsse = gpu_fragment_usse_alloc_mapped(patcherFragmentUsseSize, &patcherFragmentUsseOffset);
 
     // create a shader patcher
     SceGxmShaderPatcherParams patcherParams;
@@ -394,16 +396,16 @@ int gxm_init()
     patcherParams.hostFreeCallback          = &patcher_host_free;
     patcherParams.bufferAllocCallback       = NULL;
     patcherParams.bufferFreeCallback        = NULL;
-    patcherParams.bufferMem                 = patcherBuffer;
+    patcherParams.bufferMem                 = data->patcherBuffer;
     patcherParams.bufferMemSize             = patcherBufferSize;
     patcherParams.vertexUsseAllocCallback   = NULL;
     patcherParams.vertexUsseFreeCallback    = NULL;
-    patcherParams.vertexUsseMem             = patcherVertexUsse;
+    patcherParams.vertexUsseMem             = data->patcherVertexUsse;
     patcherParams.vertexUsseMemSize         = patcherVertexUsseSize;
     patcherParams.vertexUsseOffset          = patcherVertexUsseOffset;
     patcherParams.fragmentUsseAllocCallback = NULL;
     patcherParams.fragmentUsseFreeCallback  = NULL;
-    patcherParams.fragmentUsseMem           = patcherFragmentUsse;
+    patcherParams.fragmentUsseMem           = data->patcherFragmentUsse;
     patcherParams.fragmentUsseMemSize       = patcherFragmentUsseSize;
     patcherParams.fragmentUsseOffset        = patcherFragmentUsseOffset;
 
@@ -507,13 +509,7 @@ int gxm_init()
         }
 
         // create the clear triangle vertex/index data
-        data->clearVertices = (clear_vertex *)mem_gpu_alloc(
-            SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE,
-            3*sizeof(clear_vertex),
-            4,
-            SCE_GXM_MEMORY_ATTRIB_READ,
-            &data->clearVerticesUid
-        );
+        data->clearVertices = (clear_vertex *)gpu_alloc_mapped_aligned(4096, 3*sizeof(clear_vertex), VGL_MEM_RAM);
 
         data->clearVertices[0].x = -1.0f;
         data->clearVertices[0].y = -1.0f;
@@ -526,13 +522,7 @@ int gxm_init()
     // Allocate a 4 * 2 bytes = 8 bytes buffer and store all possible
     // 16-bit indices in linear ascending order, so we can use this for
     // all drawing operations where we don't want to use indexing.
-    data->linearIndices = (uint16_t *)mem_gpu_alloc(
-        SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE,
-        4*sizeof(uint16_t),
-        sizeof(uint16_t),
-        SCE_GXM_MEMORY_ATTRIB_READ,
-        &data->linearIndicesUid
-    );
+    data->linearIndices = (uint16_t *)gpu_alloc_mapped_aligned(sizeof(uint16_t), 4*sizeof(uint16_t), VGL_MEM_RAM);
 
     for (uint16_t i = 0; i < 4; ++i)
     {
@@ -611,13 +601,7 @@ int gxm_init()
     data->clearClearColorParam = (SceGxmProgramParameter *)sceGxmProgramFindParameterByName(clearFragmentProgramGxp, "uClearColor");
 
     // Allocate memory for screen vertices
-    data->screenVertices = mem_gpu_alloc(
-        SCE_KERNEL_MEMBLOCK_TYPE_USER_RW,
-        4 * sizeof(texture_vertex),
-        sizeof(texture_vertex),
-        SCE_GXM_MEMORY_ATTRIB_READ,
-        &data->screenVerticesUid
-    );
+    data->screenVertices = gpu_alloc_mapped_aligned(sizeof(texture_vertex), 4*sizeof(texture_vertex), VGL_MEM_EXTERNAL);
 
     init_orthographic_matrix(data->ortho_matrix, -1.0f, 1.0f, -1.0f, 1.0f, 0.0f, 1.0f);
 
@@ -632,22 +616,8 @@ int gxm_init()
     }
 
     // Allocate memory for the memory pool
-    data->pool_addr[0] = mem_gpu_alloc(
-        SCE_KERNEL_MEMBLOCK_TYPE_USER_RW,
-        VITA_GXM_POOL_SIZE,
-        sizeof(void *),
-        SCE_GXM_MEMORY_ATTRIB_READ,
-        &data->poolUid[0]
-    );
-
-    data->pool_addr[1] = mem_gpu_alloc(
-        SCE_KERNEL_MEMBLOCK_TYPE_USER_RW,
-        VITA_GXM_POOL_SIZE,
-        sizeof(void *),
-        SCE_GXM_MEMORY_ATTRIB_READ,
-        &data->poolUid[1]
-    );
-
+    data->pool_addr[0] = gpu_alloc_mapped_aligned(sizeof(void *), VITA_GXM_POOL_SIZE, VGL_MEM_EXTERNAL);
+    data->pool_addr[1] = gpu_alloc_mapped_aligned(sizeof(void *), VITA_GXM_POOL_SIZE, VGL_MEM_EXTERNAL);
     data->pool_index = 0;
     data->current_pool = 0;
 #endif
@@ -673,8 +643,8 @@ void gxm_finish()
     free_fragment_programs(data, &data->blendFragmentPrograms.blend_mode_blend);
 #endif
 
-    mem_gpu_free(data->linearIndicesUid);
-    mem_gpu_free(data->clearVerticesUid);
+    vgl_free(data->linearIndices);
+    vgl_free(data->clearVertices);
 
     // wait until display queue is finished before deallocating display buffers
     sceGxmDisplayQueueFinish();
@@ -683,15 +653,15 @@ void gxm_finish()
     {
         // clear the buffer then deallocate
         SDL_memset(data->displayBufferData[i], 0, VITA_GXM_SCREEN_HEIGHT * VITA_GXM_SCREEN_STRIDE * 4);
-        mem_gpu_free(data->displayBufferUid[i]);
+        vgl_free(data->displayBufferData[i]);
 
         // destroy the sync object
         sceGxmSyncObjectDestroy(data->displayBufferSync[i]);
     }
 
     // free the depth and stencil buffer
-    mem_gpu_free(data->depthBufferUid);
-    mem_gpu_free(data->stencilBufferUid);
+    vgl_free(data->depthBufferData);
+    vgl_free(data->stencilBufferData);
 
     // unregister programs and destroy shader patcher
     sceGxmShaderPatcherUnregisterProgram(data->shaderPatcher, data->textureFragmentProgramId);
@@ -700,25 +670,27 @@ void gxm_finish()
     sceGxmShaderPatcherUnregisterProgram(data->shaderPatcher, data->clearVertexProgramId);
 
     sceGxmShaderPatcherDestroy(data->shaderPatcher);
-    mem_fragment_usse_free(data->patcherFragmentUsseUid);
-    mem_vertex_usse_free(data->patcherVertexUsseUid);
-    mem_gpu_free(data->patcherBufferUid);
+    gpu_fragment_usse_free_mapped(data->patcherFragmentUsse);
+    gpu_vertex_usse_free_mapped(data->patcherVertexUsse);
+    vgl_free(data->patcherBuffer);
 
     // destroy the render target
     sceGxmDestroyRenderTarget(data->renderTarget);
 
     // destroy the gxm context
     sceGxmDestroyContext(data->gxm_context);
-    mem_fragment_usse_free(data->fragmentUsseRingBufferUid);
-    mem_gpu_free(data->fragmentRingBufferUid);
-    mem_gpu_free(data->vertexRingBufferUid);
-    mem_gpu_free(data->vdmRingBufferUid);
+    gpu_fragment_usse_free_mapped(data->fragmentUsseRingBuffer);
+    vgl_free(data->fragmentRingBuffer);
+    vgl_free(data->vertexRingBuffer);
+    vgl_free(data->vdmRingBuffer);
     SDL_free(data->contextParams.hostMem);
-    mem_gpu_free(data->screenVerticesUid);
+    vgl_free(data->screenVertices);
 #ifdef VITA_HW_ACCEL
-    mem_gpu_free(data->poolUid[0]);
-    mem_gpu_free(data->poolUid[1]);
+    vgl_free(data->pool_addr[0]);
+    vgl_free(data->pool_addr[1]);
 #endif
+    vgl_mem_term();
+
     // terminate libgxm
     sceGxmTerminate();
 
@@ -728,16 +700,16 @@ void gxm_finish()
 void free_gxm_texture(gxm_texture *texture)
 {
     if (texture) {
-        if (texture->palette_UID) {
-            mem_gpu_free(texture->palette_UID);
+        if (texture->palette) {
+            vgl_free(texture->palette);
         }
-        mem_gpu_free(texture->data_UID);
+        vgl_free(texture->data);
 #ifdef VITA_HW_ACCEL
         if (texture->gxm_rendertarget) {
             sceGxmDestroyRenderTarget(texture->gxm_rendertarget);
         }
-        if (texture->depth_UID) {
-            mem_gpu_free(texture->depth_UID);
+        if (texture->depth) {
+            vgl_free(texture->depth);
         }
         notification_busy[texture->notification_id] = 0;
 #endif
@@ -783,58 +755,45 @@ void gxm_texture_set_alloc_memblock_type(SceKernelMemBlockType type)
 
 gxm_texture* create_gxm_texture(unsigned int w, unsigned int h, SceGxmTextureFormat format)
 {
-    gxm_texture *texture = SDL_malloc(sizeof(gxm_texture));
+    gxm_texture *texture = SDL_calloc(sizeof(gxm_texture), 1);
     if (!texture)
         return NULL;
 
     const int tex_size =  ((w + 7) & ~ 7) * h * tex_format_to_bytespp(format);
 
     /* Allocate a GPU buffer for the texture */
-    void *texture_data = mem_gpu_alloc(
-        textureMemBlockType,
-        tex_size,
-        SCE_GXM_TEXTURE_ALIGNMENT,
-        SCE_GXM_MEMORY_ATTRIB_READ | SCE_GXM_MEMORY_ATTRIB_WRITE,
-        &texture->data_UID
-    );
+    texture->data = gpu_alloc_mapped_aligned(SCE_GXM_TEXTURE_ALIGNMENT, tex_size, (textureMemBlockType == SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW) ? VGL_MEM_VRAM : VGL_MEM_RAM);
 
-    if (!texture_data) {
+    if (!texture->data) {
         free(texture);
         return NULL;
     }
 
     /* Clear the texture */
-    SDL_memset(texture_data, 0, tex_size);
+    SDL_memset(texture->data, 0, tex_size);
 
     /* Create the gxm texture */
-    sceGxmTextureInitLinear( &texture->gxm_tex, texture_data, format, w, h, 0);
+    sceGxmTextureInitLinear(&texture->gxm_tex, texture->data, format, w, h, 0);
 
     if ((format & 0x9f000000U) == SCE_GXM_TEXTURE_BASE_FORMAT_P8) {
         const int pal_size = 256 * sizeof(uint32_t);
 
-        void *texture_palette = mem_gpu_alloc(
-            SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW,
-            pal_size,
-            SCE_GXM_PALETTE_ALIGNMENT,
-            SCE_GXM_MEMORY_ATTRIB_READ,
-            &texture->palette_UID);
+        texture->palette = gpu_alloc_mapped_aligned(SCE_GXM_PALETTE_ALIGNMENT, pal_size, VGL_MEM_VRAM);
 
-        if (!texture_palette) {
-            texture->palette_UID = 0;
+        if (!texture->palette) {
             free_gxm_texture(texture);
             return NULL;
         }
 
-        SDL_memset(texture_palette, 0, pal_size);
+        SDL_memset(texture->palette, 0, pal_size);
 
-        sceGxmTextureSetPalette(&texture->gxm_tex, texture_palette);
+        sceGxmTextureSetPalette(&texture->gxm_tex, texture->palette);
     } else {
-        texture->palette_UID = 0;
+        texture->palette = NULL;
     }
 
 #ifdef VITA_HW_ACCEL
     {
-        void *depthBufferData;
         const uint32_t aligneColorSurfacedStride = ALIGN(w, 8);
         const uint32_t alignedWidth = ALIGN(w, SCE_GXM_TILE_SIZEX);
         const uint32_t alignedHeight = ALIGN(h, SCE_GXM_TILE_SIZEY);
@@ -877,7 +836,7 @@ gxm_texture* create_gxm_texture(unsigned int w, unsigned int h, SceGxmTextureFor
             w,
             h,
             aligneColorSurfacedStride,
-            texture_data
+            texture->data
         );
 
         if (err < 0) {
@@ -887,12 +846,7 @@ gxm_texture* create_gxm_texture(unsigned int w, unsigned int h, SceGxmTextureFor
         }
 
         // allocate it
-        depthBufferData = mem_gpu_alloc(
-            SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE,
-            4*sampleCount,
-            SCE_GXM_DEPTHSTENCIL_SURFACE_ALIGNMENT,
-            SCE_GXM_MEMORY_ATTRIB_READ | SCE_GXM_MEMORY_ATTRIB_WRITE,
-            &texture->depth_UID);
+        texture->depth = gpu_alloc_mapped_aligned(SCE_GXM_DEPTHSTENCIL_SURFACE_ALIGNMENT, 4*sampleCount, VGL_MEM_RAM);
 
         // create the SceGxmDepthStencilSurface structure
         err = sceGxmDepthStencilSurfaceInit(
@@ -900,7 +854,7 @@ gxm_texture* create_gxm_texture(unsigned int w, unsigned int h, SceGxmTextureFor
             SCE_GXM_DEPTH_STENCIL_FORMAT_S8D24,
             SCE_GXM_DEPTH_STENCIL_SURFACE_TILED,
             depthStrideInSamples,
-            depthBufferData,
+            texture->depth,
             NULL);
 
         if (err < 0) {
@@ -918,7 +872,7 @@ gxm_texture* create_gxm_texture(unsigned int w, unsigned int h, SceGxmTextureFor
             renderTargetParams.flags = 0;
             renderTargetParams.width = w;
             renderTargetParams.height = h;
-            renderTargetParams.scenesPerFrame = 1;
+            renderTargetParams.scenesPerFrame = MAX_SCENES_PER_FRAME;
             renderTargetParams.multisampleMode = SCE_GXM_MULTISAMPLE_NONE;
             renderTargetParams.multisampleLocations = 0;
             renderTargetParams.driverMemBlock = -1;
@@ -928,6 +882,7 @@ gxm_texture* create_gxm_texture(unsigned int w, unsigned int h, SceGxmTextureFor
 
             texture->gxm_rendertarget = tgt;
 
+            // Max rendertarget num is 48U. Should really hack around it somehow
             if (err < 0) {
                 free_gxm_texture(texture);
                 SDL_SetError("create render target failed: %d\n", err);
@@ -953,7 +908,13 @@ gxm_texture* create_gxm_texture(unsigned int w, unsigned int h, SceGxmTextureFor
     }
 
     if (!free_notification_found)
-        SDL_SetError("Out of free notification!\n");
+    {
+        //SDL_SetError("Out of free notification!\n");
+        //just use notification 512 in this case and hope for the best
+        texture->notification_id = NOTIF_NUM - 1;
+        texture->fragment_notif.address = notificationMem;
+    }
+
 #endif
 
     return texture;
@@ -993,6 +954,20 @@ void gxm_init_texture_scale(const gxm_texture *texture, float x, float y, float 
 
 void gxm_start_drawing()
 {
+#ifdef VITA_HW_ACCEL
+/*
+    if (data->lastRenderTarget != data->renderTarget)
+    {
+        if (data->lastTargetTexture)
+        {
+            *data->lastTargetTexture->fragment_notif.address = 0;
+            sceGxmEndScene(data->gxm_context, NULL, &data->lastTargetTexture->fragment_notif);
+            data->lastTargetTexture = NULL;
+        }
+        data->lastRenderTarget = data->renderTarget;
+    }
+*/
+#endif
     sceGxmBeginScene(
         data->gxm_context,
         0,
@@ -1009,6 +984,17 @@ void gxm_start_drawing()
 
 void gxm_wait_rendering_done()
 {
+#ifdef VITA_HW_ACCEL
+/*
+    if (data->lastTargetTexture)
+    {
+        *data->lastTargetTexture->fragment_notif.address = 0;
+        sceGxmEndScene(data->gxm_context, NULL, &data->lastTargetTexture->fragment_notif);
+        data->lastTargetTexture = NULL;
+    }
+*/
+    sceGxmTransferFinish();
+#endif
     sceGxmFinish(data->gxm_context);
 }
 
@@ -1086,6 +1072,8 @@ void gxm_draw_screen_texture(gxm_texture *texture)
     sceGxmSetUniformDataF(vertex_wvp_buffer, data->textureWvpParam, 0, 16, data->ortho_matrix);
     sceGxmSetFragmentTexture(data->gxm_context, 0, &texture->gxm_tex);
     sceGxmDraw(data->gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP, SCE_GXM_INDEX_FORMAT_U16, data->linearIndices, 4);
+    // make sure that transfers are finished before rendering the texture
+    sceGxmNotificationWait(&texture->fragment_notif);
 }
 
 void gxm_render_clear()
@@ -1117,15 +1105,46 @@ void gxm_render_clear()
 // rework of notification system, sceGxmFinish or ensuring that jobs are finished before queuing new ones is probably a safer approach (and slower one)
 void gxm_lock_texture(gxm_texture *texture)
 {
-    //if(*texture->fragment_notif.address != texture->fragment_notif.value)
-    //    sceGxmFinish(data->gxm_context);
+    //sceGxmTransferFinish();
+    //sceGxmFinish(data->gxm_context);
     sceGxmNotificationWait(&texture->fragment_notif);
+    /*
+    if (data->lastTargetTexture)
+    {
+        *data->lastTargetTexture->fragment_notif.address = 0;
+        sceGxmEndScene(data->gxm_context, NULL, &data->lastTargetTexture->fragment_notif);
+        data->lastTargetTexture = NULL;
+    }
+    sceGxmFinish(data->gxm_context);
+    */
 }
 
 void gxm_fill_rect(gxm_texture *dst, SDL_Rect dstrect, float r, float g, float b, float a)
 {
     //sceGxmNotificationWait(&dst->fragment_notif);
+/*
+    if (data->lastRenderTarget != dst->gxm_rendertarget)
+    {
+        if (data->lastTargetTexture)
+        {
+            *data->lastTargetTexture->fragment_notif.address = 0;
+            sceGxmEndScene(data->gxm_context, NULL, &data->lastTargetTexture->fragment_notif);
+        }
 
+        sceGxmBeginScene(
+            data->gxm_context,
+            0,
+            dst->gxm_rendertarget,
+            NULL,
+            NULL,
+            NULL,
+            &dst->gxm_colorsurface,
+            &dst->gxm_depthstencil
+        );
+        data->lastTargetTexture = dst;
+        data->lastRenderTarget = data->renderTarget;
+    }
+*/
     sceGxmBeginScene(
         data->gxm_context,
         0,
@@ -1178,10 +1197,33 @@ void gxm_fill_rect(gxm_texture *dst, SDL_Rect dstrect, float r, float g, float b
     //sceGxmFinish(data->gxm_context);
 }
 
-void gxm_blit(gxm_texture *src, SDL_Rect srcrect, gxm_texture *dst, SDL_Rect dstrect, int alpha_blit)
+void gxm_blit(gxm_texture *src, SDL_Rect srcrect, gxm_texture *dst, SDL_Rect dstrect, int alpha_blit, Uint8 alpha)
 {
     //sceGxmNotificationWait(&src->fragment_notif);
     //sceGxmNotificationWait(&dst->fragment_notif);
+/*
+    if (data->lastRenderTarget != dst->gxm_rendertarget)
+    {
+        if (data->lastTargetTexture)
+        {
+            *data->lastTargetTexture->fragment_notif.address = 0;
+            sceGxmEndScene(data->gxm_context, NULL, &data->lastTargetTexture->fragment_notif);
+        }
+
+        sceGxmBeginScene(
+            data->gxm_context,
+            0,
+            dst->gxm_rendertarget,
+            NULL,
+            NULL,
+            NULL,
+            &dst->gxm_colorsurface,
+            &dst->gxm_depthstencil
+        );
+        data->lastTargetTexture = dst;
+        data->lastRenderTarget = data->renderTarget;
+    }
+*/
 
     sceGxmBeginScene(
         data->gxm_context,
@@ -1253,6 +1295,69 @@ void gxm_blit(gxm_texture *src, SDL_Rect srcrect, gxm_texture *dst, SDL_Rect dst
     sceGxmEndScene(data->gxm_context, NULL, &dst->fragment_notif);
     //sceGxmFinish(data->gxm_context);
 }
+
+void gxm_fill_rect_transfer(gxm_texture *dst, SDL_Rect dstrect, uint32_t color)
+{
+    //sceGxmNotificationWait(&dst->fragment_notif);
+    SceGxmTransferFormat transferFormat = gxm_texture_get_transferformat(dst);
+
+    *dst->fragment_notif.address = 0;
+
+    sceGxmTransferFill(color, 
+        transferFormat,
+        gxm_texture_get_datap(dst),
+        dstrect.x,
+        dstrect.y,
+        dstrect.w,
+        dstrect.h,
+        gxm_texture_get_stride(dst),
+        NULL,
+        0,
+        &dst->fragment_notif
+    );
+
+    //sceGxmTransferFinish();
+}
+
+void gxm_blit_transfer(gxm_texture *src, SDL_Rect srcrect, gxm_texture *dst, SDL_Rect dstrect, int colorkey_enabled, Uint32 colorkey)
+{
+    //sceGxmNotificationWait(&src->fragment_notif);
+    //sceGxmNotificationWait(&dst->fragment_notif);
+
+    SceGxmTransferFormat srcTransferFormat = gxm_texture_get_transferformat(src);
+    SceGxmTransferFormat dstTransferFormat = gxm_texture_get_transferformat(dst);
+
+    //SCE_GXM_TRANSFER_COLORKEY_NONE,
+    //SCE_GXM_TRANSFER_COLORKEY_PASS,
+    //SCE_GXM_TRANSFER_COLORKEY_REJECT
+
+    *dst->fragment_notif.address = 0;
+
+    sceGxmTransferCopy(
+        srcrect.w,
+        srcrect.h,
+        colorkey,
+        0xFFFFFF,
+        colorkey_enabled ? SCE_GXM_TRANSFER_COLORKEY_REJECT : SCE_GXM_TRANSFER_COLORKEY_NONE,
+        srcTransferFormat,
+        SCE_GXM_TRANSFER_LINEAR,
+        gxm_texture_get_datap(src),
+        srcrect.x,
+        srcrect.y,
+        gxm_texture_get_stride(src),
+        dstTransferFormat,
+        SCE_GXM_TRANSFER_LINEAR,
+        gxm_texture_get_datap(dst),
+        dstrect.x,
+        dstrect.y,
+        gxm_texture_get_stride(dst),
+        NULL,
+        0,
+        &dst->fragment_notif
+    );
+
+    //sceGxmTransferFinish();
+}
 #endif
 
 static unsigned int back_buffer_index_for_common_dialog = 0;
@@ -1263,7 +1368,6 @@ struct
     VITA_GXM_DisplayData displayData;
     SceGxmSyncObject* sync;
     SceGxmColorSurface surf;
-    SceUID uid;
 } buffer_for_common_dialog[VITA_GXM_BUFFERS];
 
 void gxm_minimal_init_for_common_dialog(void)
@@ -1288,12 +1392,11 @@ void gxm_init_for_common_dialog(void)
     for (int i = 0; i < VITA_GXM_BUFFERS; i += 1)
     {
         buffer_for_common_dialog[i].displayData.vblank_wait = SDL_TRUE;
-        buffer_for_common_dialog[i].displayData.address = mem_gpu_alloc(
-            SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW,
-            4 * VITA_GXM_SCREEN_STRIDE * VITA_GXM_SCREEN_HEIGHT,
+        buffer_for_common_dialog[i].displayData.address = gpu_alloc_mapped_aligned(
             SCE_GXM_COLOR_SURFACE_ALIGNMENT,
-            SCE_GXM_MEMORY_ATTRIB_READ | SCE_GXM_MEMORY_ATTRIB_WRITE,
-            &buffer_for_common_dialog[i].uid);
+            4 * VITA_GXM_SCREEN_STRIDE * VITA_GXM_SCREEN_HEIGHT,
+            VGL_MEM_VRAM);
+
         sceGxmColorSurfaceInit(
             &buffer_for_common_dialog[i].surf,
             VITA_GXM_PIXEL_FORMAT,
@@ -1337,7 +1440,7 @@ void gxm_term_for_common_dialog(void)
     sceGxmDisplayQueueFinish();
     for (int i = 0; i < VITA_GXM_BUFFERS; i += 1)
     {
-        mem_gpu_free(buffer_for_common_dialog[i].uid);
+        vgl_free(buffer_for_common_dialog[i].displayData.address);
         sceGxmSyncObjectDestroy(buffer_for_common_dialog[i].sync);
     }
 }

@@ -65,13 +65,13 @@ typedef struct texture_vertex {
 
 typedef struct gxm_texture {
     SceGxmTexture gxm_tex;
-    SceUID data_UID;
-    SceUID palette_UID;
+    void *data;
+    void *palette;
 #ifdef VITA_HW_ACCEL
     SceGxmRenderTarget *gxm_rendertarget;
     SceGxmColorSurface gxm_colorsurface;
     SceGxmDepthStencilSurface gxm_depthstencil;
-    SceUID depth_UID;
+    void *depth;
     int notification_id;
     SceGxmNotification fragment_notif;
 #endif
@@ -92,20 +92,17 @@ typedef struct
 {
     VITA_GXM_DisplayData displayData;
 
-    SceUID vdmRingBufferUid;
-    SceUID vertexRingBufferUid;
-    SceUID fragmentRingBufferUid;
-    SceUID fragmentUsseRingBufferUid;
+    void *vdmRingBuffer;
+    void *vertexRingBuffer;
+    void *fragmentRingBuffer;
+    void *fragmentUsseRingBuffer;
     SceGxmContextParams contextParams;
     SceGxmContext *gxm_context;
     SceGxmRenderTarget *renderTarget;
-    SceUID displayBufferUid[VITA_GXM_BUFFERS];
     void *displayBufferData[VITA_GXM_BUFFERS];
     SceGxmColorSurface displaySurface[VITA_GXM_BUFFERS];
     SceGxmSyncObject *displayBufferSync[VITA_GXM_BUFFERS];
 
-    SceUID depthBufferUid;
-    SceUID stencilBufferUid;
     SceGxmDepthStencilSurface depthSurface;
     void *depthBufferData;
     void *stencilBufferData;
@@ -114,7 +111,6 @@ typedef struct
     unsigned int frontBufferIndex;
 
     texture_vertex *screenVertices;
-    SceUID screenVerticesUid;
 
     float ortho_matrix[4*4];
 
@@ -133,20 +129,19 @@ typedef struct
     SceGxmShaderPatcherId clearVertexProgramId;
     SceGxmShaderPatcherId clearFragmentProgramId;
 
-    SceUID patcherBufferUid;
-    SceUID patcherVertexUsseUid;
-    SceUID patcherFragmentUsseUid;
+    void *patcherBuffer;
+    void *patcherVertexUsse;
+    void *patcherFragmentUsse;
 
-    SceUID linearIndicesUid;
-    SceUID clearVerticesUid;
     uint16_t *linearIndices;
     clear_vertex *clearVertices;
     blend_fragment_programs blendFragmentPrograms;
 #ifdef VITA_HW_ACCEL
     void* pool_addr[2];
-    SceUID poolUid[2];
     unsigned int pool_index;
     unsigned int current_pool;
+    SceGxmRenderTarget *lastRenderTarget;
+    gxm_texture *lastTargetTexture;
 #endif
 } VITA_GXM_RenderData;
 

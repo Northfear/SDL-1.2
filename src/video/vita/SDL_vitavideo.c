@@ -36,6 +36,8 @@
 #include "SDL_render_vita_gxm_tools.h"
 #include "SDL_render_vita_gxm_types.h"
 
+#include <psp2/kernel/clib.h>
+
 #define VITAVID_DRIVER_NAME "vita"
 
 typedef struct private_hwdata {
@@ -150,12 +152,12 @@ int VITA_VideoInit(_THIS, SDL_PixelFormat *vformat)
 {
     this->info.hw_available = 1;
     this->info.blit_hw = VITA_BLIT_HW;
-    this->info.blit_hw_CC = 0;
+    this->info.blit_hw_CC = VITA_BLIT_HW;
     // blit_hw_A is semi-functional. 32 blits onto 32 surfaces are working
     // transparent blits (8 bit ones???) onto non-transparent surface (16 bit) might result in black images
     this->info.blit_hw_A = VITA_BLIT_HW_A;
     this->info.blit_sw = VITA_BLIT_HW;
-    this->info.blit_sw_CC = 0;
+    this->info.blit_sw_CC = VITA_BLIT_HW;
     this->info.blit_sw_A = VITA_BLIT_HW_A;
     this->info.blit_fill = VITA_FILL_HW;
 
@@ -423,10 +425,9 @@ static int VITA_FillHWRect(_THIS, SDL_Surface *dst, SDL_Rect *dstrect, Uint32 co
         dst_rect = *dstrect;
     }
 
-    // fallback to SW fill with 8 bit surfaces
-    // also fallback to SW for smaller fills
+    // fallback to SW fill for smaller fills
     const int min_blit_size = 1024;
-    if (dst->format->BitsPerPixel == 8 || dst_rect.w * dst_rect.h <= min_blit_size)
+    if (dst_rect.w * dst_rect.h <= min_blit_size)
     {
         Uint8 *row = (Uint8 *)dst->pixels+dstrect->y*dst->pitch+
                 dstrect->x*dst->format->BytesPerPixel;
@@ -450,13 +451,16 @@ static int VITA_FillHWRect(_THIS, SDL_Surface *dst, SDL_Rect *dstrect, Uint32 co
         }
     }
 
+/*
     SDL_PixelFormat *fmt = dst->format;
     float a = ((color & fmt->Amask) >> (fmt->Ashift - fmt->Aloss)) / 255.0f;
     float r = ((color & fmt->Rmask) >> (fmt->Rshift - fmt->Rloss)) / 255.0f;
     float g = ((color & fmt->Gmask) >> (fmt->Gshift - fmt->Gloss)) / 255.0f;
     float b = ((color & fmt->Bmask) << (fmt->Bloss - fmt->Bshift)) / 255.0f;
 
-    gxm_fill_rect(dst_texture, *dstrect, r, g, b, a);
+    //gxm_fill_rect(dst_texture, *dstrect, r, g, b, a);
+*/
+    gxm_fill_rect_transfer(dst_texture, *dstrect, color);
     return(0);
 }
 
@@ -470,8 +474,8 @@ static int VITA_CheckHWBlit(_THIS, SDL_Surface *src, SDL_Surface *dst)
     }
 
     // no hw blit for paletted surfaces for now (it ends up being messed up)
-    if (src->format->BitsPerPixel == 8 || dst->format->BitsPerPixel == 8)
-        return 0;
+    //if (src->format->BitsPerPixel == 8 || dst->format->BitsPerPixel == 8)
+    //    return 0;
 
     int accelerated;
 
@@ -533,20 +537,33 @@ static int VITA_HWAccelBlit(SDL_Surface *src, SDL_Rect *srcrect, SDL_Surface *ds
     }
 
     int alpha_blit = ((src->flags & SDL_SRCALPHA) == SDL_SRCALPHA) ? 1 : 0;
-    gxm_blit(src_texture, src_rect, dst_texture, dst_rect, alpha_blit);
+    int colorkey_blit = ((src->flags & SDL_SRCCOLORKEY) == SDL_SRCCOLORKEY) ? 1 : 0;
+
+    if (alpha_blit)
+    {
+        gxm_blit(src_texture, src_rect, dst_texture, dst_rect, alpha_blit, src->format->alpha);
+    }
+    else if (colorkey_blit)
+    {
+        //gxm_blit(src_texture, src_rect, dst_texture, dst_rect, alpha_blit, src->format->alpha);
+        gxm_blit_transfer(src_texture, src_rect, dst_texture, dst_rect, colorkey_blit, src->format->colorkey);
+    }
+    else
+    {
+        //gxm_blit(src_texture, src_rect, dst_texture, dst_rect, alpha_blit, src->format->alpha);
+        gxm_blit_transfer(src_texture, src_rect, dst_texture, dst_rect, colorkey_blit, src->format->colorkey);
+    }
 
     return(0);
 }
 
 static int VITA_SetHWAlpha(_THIS, SDL_Surface *surface, Uint8 alpha)
 {
-    // TODO
     return 0;
 }
 
 static int VITA_SetHWColorKey(_THIS, SDL_Surface *src, Uint32 key)
 {
-    // TODO
     return 0;
 }
 #endif

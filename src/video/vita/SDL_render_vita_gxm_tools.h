@@ -67,7 +67,9 @@ void gxm_render_clear();
 
 #ifdef VITA_HW_ACCEL
 void gxm_fill_rect(gxm_texture *dst, SDL_Rect dstrect, float r, float g, float b, float a);
-void gxm_blit(gxm_texture *src, SDL_Rect srcrect, gxm_texture *dst, SDL_Rect dstrect, int alpha_blit);
+void gxm_blit(gxm_texture *src, SDL_Rect srcrect, gxm_texture *dst, SDL_Rect dstrect, int alpha_blit, Uint8 alpha);
+void gxm_fill_rect_transfer(gxm_texture *dst, SDL_Rect dstrect, uint32_t color);
+void gxm_blit_transfer(gxm_texture *src, SDL_Rect srcrect, gxm_texture *dst, SDL_Rect dstrect, int colorkey_enabled, Uint32 colorkey);
 void gxm_lock_texture(gxm_texture *texture);
 #endif
 
