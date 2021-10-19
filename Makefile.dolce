@@ -3,7 +3,7 @@
 INCLUDE = -I./include
 CFLAGS  = -Ofast -mcpu=cortex-a9 -mfpu=neon -fgraphite-identity -floop-nest-optimize -flto=jobserver -ffat-lto-objects \
 $(INCLUDE) -lSceLibc_stub -Werror -DDOLCESDK \
--Dmemcpy=vgl_memcpy -Dmemset=sceClibMemset -Dmemmove=sceClibMemmove -Dmemcmp=sceClibMemcmp
+-Dmemcpy=sceClibMemcpy -Dmemset=sceClibMemset -Dmemmove=sceClibMemmove -Dmemcmp=sceClibMemcmp
 
 ifeq ($(VITA_HW_ACCEL),1)
 CFLAGS += -DVITA_HW_ACCEL

@@ -451,16 +451,15 @@ static int VITA_FillHWRect(_THIS, SDL_Surface *dst, SDL_Rect *dstrect, Uint32 co
         }
     }
 
-/*
+
     SDL_PixelFormat *fmt = dst->format;
     float a = ((color & fmt->Amask) >> (fmt->Ashift - fmt->Aloss)) / 255.0f;
     float r = ((color & fmt->Rmask) >> (fmt->Rshift - fmt->Rloss)) / 255.0f;
     float g = ((color & fmt->Gmask) >> (fmt->Gshift - fmt->Gloss)) / 255.0f;
     float b = ((color & fmt->Bmask) << (fmt->Bloss - fmt->Bshift)) / 255.0f;
+    gxm_fill_rect(dst_texture, *dstrect, r, g, b, a);
 
-    //gxm_fill_rect(dst_texture, *dstrect, r, g, b, a);
-*/
-    gxm_fill_rect_transfer(dst_texture, *dstrect, color);
+    //gxm_fill_rect_transfer(dst_texture, *dstrect, color);
     return(0);
 }
 
@@ -545,13 +544,13 @@ static int VITA_HWAccelBlit(SDL_Surface *src, SDL_Rect *srcrect, SDL_Surface *ds
     }
     else if (colorkey_blit)
     {
-        //gxm_blit(src_texture, src_rect, dst_texture, dst_rect, alpha_blit, src->format->alpha);
-        gxm_blit_transfer(src_texture, src_rect, dst_texture, dst_rect, colorkey_blit, src->format->colorkey);
+        gxm_blit(src_texture, src_rect, dst_texture, dst_rect, alpha_blit, src->format->alpha);
+        //gxm_blit_transfer(src_texture, src_rect, dst_texture, dst_rect, colorkey_blit, src->format->colorkey);
     }
     else
     {
-        //gxm_blit(src_texture, src_rect, dst_texture, dst_rect, alpha_blit, src->format->alpha);
-        gxm_blit_transfer(src_texture, src_rect, dst_texture, dst_rect, colorkey_blit, src->format->colorkey);
+        gxm_blit(src_texture, src_rect, dst_texture, dst_rect, alpha_blit, src->format->alpha);
+        //gxm_blit_transfer(src_texture, src_rect, dst_texture, dst_rect, colorkey_blit, src->format->colorkey);
     }
 
     return(0);

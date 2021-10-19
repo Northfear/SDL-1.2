@@ -251,6 +251,7 @@ int gxm_init()
     info.size = sizeof(SceKernelFreeMemorySizeInfo);
     sceKernelGetFreeMemorySize(&info);
     int ram_threshold = 0x1000000;
+    //int ram_threshold = 0;
     int cdram_threshold = 256 * 1024;
     int phycont_threshold = 1 * 1024 * 1024;
     size_t ram_size = info.size_user > ram_threshold ? info.size_user - ram_threshold : info.size_user;
@@ -750,7 +751,7 @@ void *gxm_texture_get_palette(const gxm_texture *texture)
 
 void gxm_texture_set_alloc_memblock_type(SceKernelMemBlockType type)
 {
-    textureMemBlockType = (type == 0) ? SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW : type;
+    textureMemBlockType = type;
 }
 
 gxm_texture* create_gxm_texture(unsigned int w, unsigned int h, SceGxmTextureFormat format)
@@ -762,7 +763,8 @@ gxm_texture* create_gxm_texture(unsigned int w, unsigned int h, SceGxmTextureFor
     const int tex_size =  ((w + 7) & ~ 7) * h * tex_format_to_bytespp(format);
 
     /* Allocate a GPU buffer for the texture */
-    texture->data = gpu_alloc_mapped_aligned(SCE_GXM_TEXTURE_ALIGNMENT, tex_size, (textureMemBlockType == SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW) ? VGL_MEM_VRAM : VGL_MEM_RAM);
+    //texture->data = gpu_alloc_mapped_aligned(SCE_GXM_TEXTURE_ALIGNMENT, tex_size, (textureMemBlockType == SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW) ? VGL_MEM_VRAM : VGL_MEM_RAM);
+    texture->data = gpu_alloc_mapped_aligned(SCE_GXM_TEXTURE_ALIGNMENT, tex_size, VGL_MEM_VRAM);
 
     if (!texture->data) {
         free(texture);
@@ -955,7 +957,7 @@ void gxm_init_texture_scale(const gxm_texture *texture, float x, float y, float 
 void gxm_start_drawing()
 {
 #ifdef VITA_HW_ACCEL
-/*
+
     if (data->lastRenderTarget != data->renderTarget)
     {
         if (data->lastTargetTexture)
@@ -966,7 +968,7 @@ void gxm_start_drawing()
         }
         data->lastRenderTarget = data->renderTarget;
     }
-*/
+
 #endif
     sceGxmBeginScene(
         data->gxm_context,
@@ -985,14 +987,14 @@ void gxm_start_drawing()
 void gxm_wait_rendering_done()
 {
 #ifdef VITA_HW_ACCEL
-/*
+
     if (data->lastTargetTexture)
     {
         *data->lastTargetTexture->fragment_notif.address = 0;
         sceGxmEndScene(data->gxm_context, NULL, &data->lastTargetTexture->fragment_notif);
         data->lastTargetTexture = NULL;
     }
-*/
+
     sceGxmTransferFinish();
 #endif
     sceGxmFinish(data->gxm_context);
@@ -1073,7 +1075,7 @@ void gxm_draw_screen_texture(gxm_texture *texture)
     sceGxmSetFragmentTexture(data->gxm_context, 0, &texture->gxm_tex);
     sceGxmDraw(data->gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP, SCE_GXM_INDEX_FORMAT_U16, data->linearIndices, 4);
     // make sure that transfers are finished before rendering the texture
-    sceGxmNotificationWait(&texture->fragment_notif);
+    //sceGxmNotificationWait(&texture->fragment_notif);
 }
 
 void gxm_render_clear()
@@ -1107,22 +1109,23 @@ void gxm_lock_texture(gxm_texture *texture)
 {
     //sceGxmTransferFinish();
     //sceGxmFinish(data->gxm_context);
-    sceGxmNotificationWait(&texture->fragment_notif);
-    /*
+    //sceGxmNotificationWait(&texture->fragment_notif);
+
     if (data->lastTargetTexture)
     {
         *data->lastTargetTexture->fragment_notif.address = 0;
         sceGxmEndScene(data->gxm_context, NULL, &data->lastTargetTexture->fragment_notif);
         data->lastTargetTexture = NULL;
     }
-    sceGxmFinish(data->gxm_context);
-    */
+    //sceGxmFinish(data->gxm_context);
+    sceGxmNotificationWait(&texture->fragment_notif);
+
 }
 
 void gxm_fill_rect(gxm_texture *dst, SDL_Rect dstrect, float r, float g, float b, float a)
 {
     //sceGxmNotificationWait(&dst->fragment_notif);
-/*
+
     if (data->lastRenderTarget != dst->gxm_rendertarget)
     {
         if (data->lastTargetTexture)
@@ -1144,7 +1147,7 @@ void gxm_fill_rect(gxm_texture *dst, SDL_Rect dstrect, float r, float g, float b
         data->lastTargetTexture = dst;
         data->lastRenderTarget = data->renderTarget;
     }
-*/
+/*
     sceGxmBeginScene(
         data->gxm_context,
         0,
@@ -1155,8 +1158,8 @@ void gxm_fill_rect(gxm_texture *dst, SDL_Rect dstrect, float r, float g, float b
         &dst->gxm_colorsurface,
         &dst->gxm_depthstencil
     );
-
-    *dst->fragment_notif.address = 0;
+*/
+    //*dst->fragment_notif.address = 0;
 
     void *color_buffer;
     float fill_color[4];
@@ -1193,7 +1196,7 @@ void gxm_fill_rect(gxm_texture *dst, SDL_Rect dstrect, float r, float g, float b
     sceGxmSetUniformDataF(color_buffer, data->clearClearColorParam, 0, 4, fill_color);
     sceGxmSetVertexStream(data->gxm_context, 0, fillVertices);
     sceGxmDraw(data->gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP, SCE_GXM_INDEX_FORMAT_U16, data->linearIndices, 4);
-    sceGxmEndScene(data->gxm_context, NULL, &dst->fragment_notif);
+    //sceGxmEndScene(data->gxm_context, NULL, &dst->fragment_notif);
     //sceGxmFinish(data->gxm_context);
 }
 
@@ -1201,7 +1204,7 @@ void gxm_blit(gxm_texture *src, SDL_Rect srcrect, gxm_texture *dst, SDL_Rect dst
 {
     //sceGxmNotificationWait(&src->fragment_notif);
     //sceGxmNotificationWait(&dst->fragment_notif);
-/*
+
     if (data->lastRenderTarget != dst->gxm_rendertarget)
     {
         if (data->lastTargetTexture)
@@ -1223,8 +1226,8 @@ void gxm_blit(gxm_texture *src, SDL_Rect srcrect, gxm_texture *dst, SDL_Rect dst
         data->lastTargetTexture = dst;
         data->lastRenderTarget = data->renderTarget;
     }
-*/
 
+/*
     sceGxmBeginScene(
         data->gxm_context,
         0,
@@ -1235,8 +1238,8 @@ void gxm_blit(gxm_texture *src, SDL_Rect srcrect, gxm_texture *dst, SDL_Rect dst
         &dst->gxm_colorsurface,
         &dst->gxm_depthstencil
     );
-
-    *dst->fragment_notif.address = 0;
+*/
+    //*dst->fragment_notif.address = 0;
 
     float src_x = srcrect.x;
     float src_y = srcrect.y;
@@ -1292,7 +1295,7 @@ void gxm_blit(gxm_texture *src, SDL_Rect srcrect, gxm_texture *dst, SDL_Rect dst
     sceGxmSetUniformDataF(vertex_wvp_buffer, data->textureWvpParam, 0, 16, data->ortho_matrix);
     sceGxmDraw(data->gxm_context, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP, SCE_GXM_INDEX_FORMAT_U16, data->linearIndices, 4);
 
-    sceGxmEndScene(data->gxm_context, NULL, &dst->fragment_notif);
+    //sceGxmEndScene(data->gxm_context, NULL, &dst->fragment_notif);
     //sceGxmFinish(data->gxm_context);
 }
 
