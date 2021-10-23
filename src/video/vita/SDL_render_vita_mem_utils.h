@@ -25,20 +25,12 @@
 #define _MEM_UTILS_H_
 
 #include <stdlib.h>
+#include "SDL_config.h"
 
 #define ALIGN(x, a) (((x) + ((a)-1)) & ~((a)-1))
 
-typedef enum {
-	VGL_MEM_VRAM, // CDRAM
-	VGL_MEM_RAM, // USER_RW RAM
-	VGL_MEM_PHYCONT, // PHYCONT_USER_RW RAM
-	VGL_MEM_EXTERNAL, // newlib mem
-	VGL_MEM_ALL
-} vglMemType;
-
 void vgl_mem_init(size_t size_ram, size_t size_cdram, size_t size_phycont);
 void vgl_mem_term(void);
-size_t vgl_mem_get_free_space(vglMemType type);
 size_t vgl_mem_get_total_space(vglMemType type);
 
 size_t vgl_malloc_usable_size(void *ptr);

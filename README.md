@@ -22,7 +22,7 @@ You can choose which functions are accelerated by using the following flags toge
 
 `VITA_BLIT_HW=1` Enables accelerated blits (enabled by default).
 
-`VITA_BLIT_HW_A=1` Enables accelerated alpha blits (somewhat limited functionality, disabled by default).
+`VITA_BLIT_HW_A=1` Enables accelerated alpha blits (only full transparency is supported, enabled by default).
 
 `VITA_FILL_HW=1` Enables accelerated fills (enabled by default).
 
@@ -32,11 +32,11 @@ This SDL 1.2 port contains few custom functions that extend its functionality an
 
 ```void SDL_VITA_SetVideoModeScaling(int x, int y, float w, float h);```
 
-Sets position of rendering surface and it's dimension.
+Sets position of screen surface and it's dimension.
 
 ```void SDL_VITA_SetVideoModeBilinear(int enable_bilinear);```
 
-Enables or disables bilinear filtering on scaled surfaces.
+Enables or disables bilinear filtering on scaled screen surface.
 
 ```void SDL_VITA_SetVideoModeSync(int enable_vsync);```
 
@@ -46,9 +46,9 @@ Enables or disables vsync.
 
 Enables or disables usage of ```sceGxmFinish``` during screen flip. In most of the cases it's safe to disable this. Doing so will improve performance a bit (but it might result in visual bugs in some games).
 
-```void SDL_VITA_SetTextureAllocMemblockType(SceKernelMemBlockType type);```
+```void SDL_VITA_SetTextureAllocMemblockType(vglMemType type);```
 
-Sets type of memory block for all new hardware surface allocations. ```SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW``` is the default one. Depending on a game ```SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE``` or ```SCE_KERNEL_MEMBLOCK_TYPE_USER_RW``` might provide a bit better (or worse) performance. Set memblock type before display/surface creation.
+Sets type of memory block for all new hardware surface allocations. ```VGL_MEM_VRAM``` is the default one. Depending on a game ```VGL_MEM_RAM``` or ```VGL_MEM_EXTERNAL``` might provide a bit better (or worse) performance. Set memblock type before display/surface creation.
 
 ```void SDL_VITA_ShowScreenKeyboard(const char *initialText, bool clearText);```
 
@@ -68,18 +68,17 @@ Mixed usage of ```SDL_SWSURFACE``` and ```SDL_HWSURFACE``` (for screen/surfaces)
 
 Set ```SDL_VITA_SetWaitGxmFinish(0)``` unless you experience visual bugs (tearing, flickering, disappearing elements).
 
-Hardware surfaces with memblock type ```SCE_KERNEL_MEMBLOCK_TYPE_USER_RW``` or ```SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE``` can provide better performance is case of big number of CPU read/writes on the surface.
+Hardware surfaces with memblock type ```VGL_MEM_RAM``` or ```VGL_MEM_EXTERNAL``` can provide better performance in case of a big number of CPU read/writes on the surface.
 
-Generally performance of ```SDL_HWSURFACE``` is somewhat faster with hardware acceleration enabled.
+Generally performance of ```SDL_HWSURFACE``` is somewhat faster with hardware acceleration enabled. Direct pixel access (e.g. surface->pixels) might drop it dramatically.
 
-Alpha blits are disabled by default. They are functional with 32 bpp surfaces, but `SDL_SetAlpha` is currently not implemented and blits may produce a bit different results than expected in some cases.
-
-HW acceleration is disabled with 8-bit surfaces.
+Alpha blits are limited to full (colorkey-like) transparency only. It might be a good idea to disable them during the build (with `VITA_BLIT_HW_A=0` flag) if the game requires partial transparency.
 
 ## Thanks to:
 - isage for [SDL2 gxm port](https://github.com/isage/SDL-mirror)
 - xerpi for [libvita2d](https://github.com/xerpi/libvita2d)
 - xerpi, Cpasjuste and rsn8887 for [original PS Vita SDL port](https://github.com/rsn8887/SDL-Vita/tree/SDL12)
+- Rinnegatamante for [memory management code from vitaGL](https://github.com/Rinnegatamante/vitaGL)
 
 
 # DEPRECATED

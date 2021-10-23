@@ -31,7 +31,6 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <psp2/kernel/sysmem.h>
 
 #define __VITA__ 1
 
@@ -40,7 +39,7 @@
 #define VITA_BLIT_HW 1
 #endif
 #ifndef VITA_BLIT_HW_A
-#define VITA_BLIT_HW_A 0
+#define VITA_BLIT_HW_A 1
 #endif
 #ifndef VITA_FILL_HW
 #define VITA_FILL_HW 1
@@ -54,6 +53,14 @@
 #define VITA_FILL_HW 0
 #endif
 
+typedef enum {
+	VGL_MEM_VRAM, // CDRAM
+	VGL_MEM_RAM, // USER_RW RAM
+	VGL_MEM_PHYCONT, // PHYCONT_USER_RW RAM
+	VGL_MEM_EXTERNAL, // newlib mem
+	VGL_MEM_ALL
+} vglMemType;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -62,7 +69,7 @@ void SDL_VITA_SetVideoModeScaling(int x, int y, float w, float h);
 void SDL_VITA_SetVideoModeBilinear(int enable_bilinear);
 void SDL_VITA_SetVideoModeSync(int enable_vsync);
 void SDL_VITA_SetWaitGxmFinish(int gxm_wait);
-void SDL_VITA_SetTextureAllocMemblockType(SceKernelMemBlockType type);
+void SDL_VITA_SetTextureAllocMemblockType(vglMemType type);
 void SDL_VITA_ShowScreenKeyboard(const char *initialText, bool clearText);
 void SDL_VITA_HideScreenKeyboard();
 void SDL_VITA_ShowMessageBox(const char *messageText);
