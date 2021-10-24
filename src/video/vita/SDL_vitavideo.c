@@ -627,12 +627,6 @@ void SDL_VITA_SetVideoModeSync(int enable_vsync)
     gxm_set_vblank_wait(vsync);
 }
 
-// custom vita function for doing sceGxmFinish on Flip (may be required in case of visual bugs)
-void SDL_VITA_SetWaitGxmFinish(int gxm_wait)
-{
-    gxm_set_finish_wait(gxm_wait);
-}
-
 // custom vita function for setting mem type for new hw texture allocations
 void SDL_VITA_SetTextureAllocMemblockType(vglMemType type)
 {

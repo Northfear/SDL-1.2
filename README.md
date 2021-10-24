@@ -42,10 +42,6 @@ Enables or disables bilinear filtering on scaled screen surface.
 
 Enables or disables vsync.
 
-```void SDL_VITA_SetWaitGxmFinish(int gxm_wait);```
-
-Enables or disables usage of ```sceGxmFinish``` during screen flip. In most of the cases it's safe to disable this. Doing so will improve performance a bit (but it might result in visual bugs in some games).
-
 ```void SDL_VITA_SetTextureAllocMemblockType(vglMemType type);```
 
 Sets type of memory block for all new hardware surface allocations. ```VGL_MEM_VRAM``` is the default one. Depending on a game ```VGL_MEM_RAM``` or ```VGL_MEM_EXTERNAL``` might provide a bit better (or worse) performance. Set memblock type before display/surface creation.
@@ -65,8 +61,6 @@ Displays message box with one button and pre-defined text.
 ## Performance considerations
 
 Mixed usage of ```SDL_SWSURFACE``` and ```SDL_HWSURFACE``` (for screen/surfaces) might result in decreased performance.
-
-Set ```SDL_VITA_SetWaitGxmFinish(0)``` unless you experience visual bugs (tearing, flickering, disappearing elements).
 
 Hardware surfaces with memblock type ```VGL_MEM_RAM``` or ```VGL_MEM_EXTERNAL``` can provide better performance in case of a big number of CPU read/writes on the surface.
 

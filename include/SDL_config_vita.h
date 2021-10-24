@@ -68,7 +68,6 @@ extern "C" {
 void SDL_VITA_SetVideoModeScaling(int x, int y, float w, float h);
 void SDL_VITA_SetVideoModeBilinear(int enable_bilinear);
 void SDL_VITA_SetVideoModeSync(int enable_vsync);
-void SDL_VITA_SetWaitGxmFinish(int gxm_wait);
 void SDL_VITA_SetTextureAllocMemblockType(vglMemType type);
 void SDL_VITA_ShowScreenKeyboard(const char *initialText, bool clearText);
 void SDL_VITA_HideScreenKeyboard();

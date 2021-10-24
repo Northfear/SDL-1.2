@@ -38,9 +38,9 @@
 
 VITA_GXM_RenderData *data;
 static vglMemType textureMemBlockType = VGL_MEM_VRAM;
-static int gxm_finish_wait = 1;
 volatile unsigned int *notificationMem;
 SceGxmNotification flipFragmentNotif;
+gxm_texture *lastScreenTexture = NULL;
 
 #ifdef VITA_HW_ACCEL
 #define NOTIF_NUM 512
@@ -512,6 +512,7 @@ int gxm_init()
     notificationMem = sceGxmGetNotificationRegion();
     flipFragmentNotif.address = notificationMem;
     flipFragmentNotif.value = 1;
+    *flipFragmentNotif.address = flipFragmentNotif.value;
 
 #ifdef VITA_HW_ACCEL
     for (int i = 0; i < NOTIF_NUM; ++i)
@@ -763,11 +764,6 @@ void gxm_set_vblank_wait(int enable)
     data->displayData.vblank_wait = enable;
 }
 
-void gxm_set_finish_wait(int enable)
-{
-    gxm_finish_wait = enable;
-}
-
 void gxm_render_clear()
 {
     void *color_buffer;
@@ -829,6 +825,7 @@ void gxm_draw_screen_texture(gxm_texture *texture, int clear_required)
 #endif
     *flipFragmentNotif.address = 0;
     sceGxmEndScene(data->gxm_context, NULL, &flipFragmentNotif);
+    lastScreenTexture = texture;
 
     data->displayData.address = data->displayBufferData[data->backBufferIndex];
 
@@ -847,11 +844,6 @@ void gxm_draw_screen_texture(gxm_texture *texture, int clear_required)
     updateParam.displaySyncObject = (SceGxmSyncObject *)data->displayBufferSync[data->backBufferIndex];
 
     sceCommonDialogUpdate(&updateParam);
-
-    if (gxm_finish_wait)
-    {
-        sceGxmNotificationWait(&flipFragmentNotif);
-    }
 
     sceGxmDisplayQueueAddEntry(
         data->displayBufferSync[data->frontBufferIndex],    // OLD fb
@@ -913,10 +905,19 @@ SceGxmTransferFormat gxm_texture_get_transferformat(const gxm_texture *texture)
 
 void gxm_fill_rect_transfer(gxm_texture *dst, SDL_Rect dstrect, uint32_t color)
 {
+    // make sure that screen rendering is finished before writing on the same texture
+    if (dst == lastScreenTexture)
+    {
+        lastScreenTexture = NULL;
+        sceGxmNotificationWait(&flipFragmentNotif);
+    }
+
+    sceGxmFinish(data->gxm_context);
     SceGxmTransferFormat transferFormat = gxm_texture_get_transferformat(dst);
 
     *dst->fragment_notif.address = 0;
 
+    // sceGxmNotificationWait could lock in theory on failed sceGxmTransfer or sceGxmEndScene
     sceGxmTransferFill(color, 
         transferFormat,
         gxm_texture_get_datap(dst),
@@ -933,6 +934,13 @@ void gxm_fill_rect_transfer(gxm_texture *dst, SDL_Rect dstrect, uint32_t color)
 
 void gxm_blit_transfer(gxm_texture *src, SDL_Rect srcrect, gxm_texture *dst, SDL_Rect dstrect, int colorkey_enabled, Uint32 colorkey, Uint32 colorkeyMask)
 {
+    // make sure that screen rendering is finished before writing on the same texture
+    if (dst == lastScreenTexture)
+    {
+        lastScreenTexture = NULL;
+        sceGxmNotificationWait(&flipFragmentNotif);
+    }
+
     SceGxmTransferFormat srcTransferFormat = gxm_texture_get_transferformat(src);
     SceGxmTransferFormat dstTransferFormat = gxm_texture_get_transferformat(dst);
 
@@ -996,9 +1004,9 @@ void gxm_init_for_common_dialog(void)
     {
         buffer_for_common_dialog[i].displayData.vblank_wait = SDL_TRUE;
         buffer_for_common_dialog[i].displayData.address = gpu_alloc_mapped_aligned(
-            SCE_GXM_COLOR_SURFACE_ALIGNMENT,
+            16 * 1024,
             4 * VITA_GXM_SCREEN_STRIDE * VITA_GXM_SCREEN_HEIGHT,
-            VGL_MEM_VRAM);
+            VGL_MEM_PHYCONT);
 
         sceGxmColorSurfaceInit(
             &buffer_for_common_dialog[i].surf,

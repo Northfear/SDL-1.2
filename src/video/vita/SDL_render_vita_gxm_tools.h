@@ -59,7 +59,6 @@ void *gxm_texture_get_palette(const gxm_texture *texture);
 void gxm_draw_screen_texture(gxm_texture *texture, int clear_required);
 void gxm_init_texture_scale(const gxm_texture *texture, float x, float y, float x_scale, float y_scale);
 void gxm_set_vblank_wait(int enable);
-void gxm_set_finish_wait(int enable);
 void gxm_render_clear();
 
 #ifdef VITA_HW_ACCEL
