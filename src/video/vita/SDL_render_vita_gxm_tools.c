@@ -912,7 +912,6 @@ void gxm_fill_rect_transfer(gxm_texture *dst, SDL_Rect dstrect, uint32_t color)
         sceGxmNotificationWait(&flipFragmentNotif);
     }
 
-    sceGxmFinish(data->gxm_context);
     SceGxmTransferFormat transferFormat = gxm_texture_get_transferformat(dst);
 
     *dst->fragment_notif.address = 0;
