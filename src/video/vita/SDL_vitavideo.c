@@ -186,6 +186,7 @@ SDL_Rect **VITA_ListModes(_THIS, SDL_PixelFormat *format, Uint32 flags)
         {0, 0, 640, 400},
         {0, 0, 640, 480},
         {0, 0, 960, 544},
+        {0, 0, 800, 600},
     };
     static SDL_Rect *VITA_modes[] = {
         &VITA_Rects[0],
@@ -193,6 +194,7 @@ SDL_Rect **VITA_ListModes(_THIS, SDL_PixelFormat *format, Uint32 flags)
         &VITA_Rects[2],
         &VITA_Rects[3],
         &VITA_Rects[4],
+        &VITA_Rects[5],
         NULL
     };
     SDL_Rect **modes = VITA_modes;

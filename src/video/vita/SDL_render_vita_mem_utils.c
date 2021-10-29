@@ -30,6 +30,10 @@
 
 #define RAM_ON_DEMAND
 
+// sometimes it's causing some kind of random memory corruption during python init in gemrb
+// not 100% sure if it's really caused by newlib mapping tho
+//#define MAP_NEWLIB_MEM
+
 static void *mempool_mspace[4] = {NULL, NULL, NULL, NULL}; // mspace creations (VRAM, RAM, PHYCONT RAM, EXTERNAL)
 static void *mempool_addr[4] = {NULL, NULL, NULL, NULL}; // addresses of heap memblocks (VRAM, RAM, PHYCONT RAM, EXTERNAL)
 static SceUID mempool_id[4] = {0, 0, 0, 0}; // UIDs of heap memblocks (VRAM, RAM, PHYCONT RAM, EXTERNAL)
@@ -39,9 +43,6 @@ static int mempool_initialized = 0;
 
 // VRAM usage setting
 uint8_t use_vram_for_usse = 1;
-
-// Newlib mempool usage setting
-uint8_t use_extra_mem = 1;
 
 
 #ifdef RAM_ON_DEMAND
@@ -87,9 +88,7 @@ void vgl_mem_init(size_t size_ram, size_t size_cdram, size_t size_phycont) {
 
     mempool_size[VGL_MEM_VRAM] = ALIGN(size_cdram, 256 * 1024);
     mempool_size[VGL_MEM_PHYCONT] = ALIGN(size_phycont, 1024 * 1024);
-#ifdef RAM_ON_DEMAND
-    mempool_size[VGL_MEM_RAM] = 0;
-#else
+#ifndef RAM_ON_DEMAND
     mempool_size[VGL_MEM_RAM] = ALIGN(size_ram, 4 * 1024);
 #endif
 
@@ -122,6 +121,7 @@ void vgl_mem_init(size_t size_ram, size_t size_cdram, size_t size_phycont) {
     }
 #endif
 
+#ifdef MAP_NEWLIB_MEM
     // Mapping newlib heap into sceGxm
     void *dummy = malloc(1);
     free(dummy);
@@ -133,6 +133,7 @@ void vgl_mem_init(size_t size_ram, size_t size_cdram, size_t size_phycont) {
 
     mempool_size[VGL_MEM_EXTERNAL] = info.mappedSize;
     mempool_addr[VGL_MEM_EXTERNAL] = info.mappedBase;
+#endif
 
     mempool_initialized = 1;
 }
@@ -140,14 +141,16 @@ void vgl_mem_init(size_t size_ram, size_t size_cdram, size_t size_phycont) {
 vglMemType vgl_mem_get_type_by_addr(void *addr) {
     if (addr >= mempool_addr[VGL_MEM_VRAM] && (addr < mempool_addr[VGL_MEM_VRAM] + mempool_size[VGL_MEM_VRAM]))
         return VGL_MEM_VRAM;
+    else if (addr >= mempool_addr[VGL_MEM_PHYCONT] && (addr < mempool_addr[VGL_MEM_PHYCONT] + mempool_size[VGL_MEM_PHYCONT]))
+        return VGL_MEM_PHYCONT;
 #ifndef RAM_ON_DEMAND
     else if (addr >= mempool_addr[VGL_MEM_RAM] && (addr < mempool_addr[VGL_MEM_RAM] + mempool_size[VGL_MEM_RAM]))
         return VGL_MEM_RAM;
 #endif
-    else if (addr >= mempool_addr[VGL_MEM_PHYCONT] && (addr < mempool_addr[VGL_MEM_PHYCONT] + mempool_size[VGL_MEM_PHYCONT]))
-        return VGL_MEM_PHYCONT;
+#ifdef MAP_NEWLIB_MEM
     else if (addr >= mempool_addr[VGL_MEM_EXTERNAL] && (addr < mempool_addr[VGL_MEM_EXTERNAL] + mempool_size[VGL_MEM_EXTERNAL]))
         return VGL_MEM_EXTERNAL;
+#endif
 #ifdef RAM_ON_DEMAND
     return VGL_MEM_RAM;
 #else
@@ -157,27 +160,31 @@ vglMemType vgl_mem_get_type_by_addr(void *addr) {
 
 void vgl_free(void *ptr) {
     vglMemType type = vgl_mem_get_type_by_addr(ptr);
-    if (type == VGL_MEM_EXTERNAL)
-        free(ptr);
+    if (mempool_mspace[type])
+        sceClibMspaceFree(mempool_mspace[type], ptr);
 #ifdef RAM_ON_DEMAND
     else if (type == VGL_MEM_RAM) {
         sceGxmUnmapMemory(ptr);
         sceKernelFreeMemBlock(sceKernelFindMemBlockByAddr(ptr, 0));
     }
 #endif
-    else if (mempool_mspace[type])
-        sceClibMspaceFree(mempool_mspace[type], ptr);
+#ifdef MAP_NEWLIB_MEM
+    else if (type == VGL_MEM_EXTERNAL)
+        free(ptr);
+#endif
 }
 
 void *vgl_memalign(size_t alignment, size_t size, vglMemType type) {
-    if (type == VGL_MEM_EXTERNAL)
-        return memalign(alignment, size);
+    if (mempool_mspace[type])
+        return sceClibMspaceMemalign(mempool_mspace[type], alignment, size);
 #ifdef RAM_ON_DEMAND
     else if (type == VGL_MEM_RAM)
         return vgl_alloc_ram_block(size);
 #endif
-    else if (mempool_mspace[type])
-        return sceClibMspaceMemalign(mempool_mspace[type], alignment, size);
+#ifdef MAP_NEWLIB_MEM
+    else if (type == VGL_MEM_EXTERNAL)
+        return memalign(alignment, size);
+#endif
     return NULL;
 }
 
@@ -204,13 +211,12 @@ void *gpu_alloc_mapped_aligned(size_t alignment, size_t size, vglMemType type) {
         if (res)
             return res;
     }
-
+#ifdef MAP_NEWLIB_MEM
     if (type != VGL_MEM_EXTERNAL) {
         // Internal mempool finished, using newlib mem
-        if (use_extra_mem)
-            res = vgl_memalign(alignment, size, VGL_MEM_EXTERNAL);
+        res = vgl_memalign(alignment, size, VGL_MEM_EXTERNAL);
     }
-
+#endif
     return res;
 }
 

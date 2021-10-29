@@ -159,8 +159,8 @@ int gxm_init()
     info.size = sizeof(SceKernelFreeMemorySizeInfo);
     sceKernelGetFreeMemorySize(&info);
     int ram_threshold = 0x1000000;
-    int cdram_threshold = 256 * 1024;
-    int phycont_threshold = 1 * 1024 * 1024;
+    int cdram_threshold = 0 * 256 * 1024;
+    int phycont_threshold = 0 * 1024 * 1024;
     size_t ram_size = info.size_user > ram_threshold ? info.size_user - ram_threshold : info.size_user;
     size_t cdram_size = info.size_cdram > cdram_threshold ? info.size_cdram - cdram_threshold : 0;
     size_t phycont_size = info.size_phycont > phycont_threshold ? info.size_phycont - phycont_threshold : 0;

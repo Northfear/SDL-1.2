@@ -70,9 +70,7 @@ typedef struct gxm_texture {
 #endif
 } gxm_texture;
 
-// alignment is fixing crashes (or at least reducing them greatly) during python init in gemrb. or during IMG_Load in different test case
-// some kind of memory corruption happening w/o alignment??
-typedef struct __attribute__((aligned))
+typedef struct
 {
     VITA_GXM_DisplayData displayData;
 
