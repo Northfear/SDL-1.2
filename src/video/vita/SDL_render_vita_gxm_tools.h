@@ -47,7 +47,7 @@ gxm_texture *create_gxm_texture(unsigned int w, unsigned int h, SceGxmTextureFor
 void free_gxm_texture(gxm_texture *texture);
 
 void gxm_texture_set_filters(gxm_texture *texture, SceGxmTextureFilter min_filter, SceGxmTextureFilter mag_filter);
-void gxm_texture_set_alloc_memblock_type(vglMemType type);
+void gxm_texture_set_alloc_memblock_type(VitaMemType type);
 SceGxmTextureFormat gxm_texture_get_format(const gxm_texture *texture);
 
 unsigned int gxm_texture_get_width(const gxm_texture *texture);

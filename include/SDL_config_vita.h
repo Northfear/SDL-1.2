@@ -54,12 +54,12 @@
 #endif
 
 typedef enum {
-	VGL_MEM_VRAM, // CDRAM
-	VGL_MEM_RAM, // USER_RW RAM
-	VGL_MEM_PHYCONT, // PHYCONT_USER_RW RAM
-	VGL_MEM_EXTERNAL, // newlib mem
-	VGL_MEM_ALL
-} vglMemType;
+	VITA_MEM_VRAM, // CDRAM
+	VITA_MEM_RAM, // USER_RW_UNCACHE RAM
+	VITA_MEM_PHYCONT, // PHYCONT_NC RAM
+    VGL_MEM_EXTERNAL, // NEWLIB MEM
+    VITA_MEM_RAM_CACHED // USER_RW
+} VitaMemType;
 
 #ifdef __cplusplus
 extern "C" {
@@ -68,7 +68,7 @@ extern "C" {
 void SDL_VITA_SetVideoModeScaling(int x, int y, float w, float h);
 void SDL_VITA_SetVideoModeBilinear(int enable_bilinear);
 void SDL_VITA_SetVideoModeSync(int enable_vsync);
-void SDL_VITA_SetTextureAllocMemblockType(vglMemType type);
+void SDL_VITA_SetTextureAllocMemblockType(VitaMemType type);
 void SDL_VITA_ShowScreenKeyboard(const char *initialText, bool clearText);
 void SDL_VITA_HideScreenKeyboard();
 void SDL_VITA_ShowMessageBox(const char *messageText);

@@ -37,7 +37,7 @@
 #define MAX_SCENES_PER_FRAME 8
 
 VITA_GXM_RenderData *data;
-static vglMemType textureMemBlockType = VGL_MEM_VRAM;
+static VitaMemType textureMemBlockType = VITA_MEM_VRAM;
 volatile unsigned int *notificationMem;
 SceGxmNotification flipFragmentNotif;
 gxm_texture *lastScreenTexture = NULL;
@@ -168,9 +168,9 @@ int gxm_init()
     vgl_mem_init(ram_size, cdram_size, phycont_size);
 
     // allocate ring buffer memory using default sizes
-    data->vdmRingBuffer = gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_VDM_RING_BUFFER_SIZE, use_vram ? VGL_MEM_VRAM : VGL_MEM_RAM);
-    data->vertexRingBuffer = gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_VERTEX_RING_BUFFER_SIZE, use_vram ? VGL_MEM_VRAM : VGL_MEM_RAM);
-    data->fragmentRingBuffer = gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_FRAGMENT_RING_BUFFER_SIZE, use_vram ? VGL_MEM_VRAM : VGL_MEM_RAM);
+    data->vdmRingBuffer = gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_VDM_RING_BUFFER_SIZE, use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
+    data->vertexRingBuffer = gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_VERTEX_RING_BUFFER_SIZE, use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
+    data->fragmentRingBuffer = gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_FRAGMENT_RING_BUFFER_SIZE, use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
 
     unsigned int fragmentUsseRingBufferOffset;
     data->fragmentUsseRingBuffer = gpu_fragment_usse_alloc_mapped(SCE_GXM_DEFAULT_FRAGMENT_USSE_RING_BUFFER_SIZE, &fragmentUsseRingBufferOffset);
@@ -216,7 +216,7 @@ int gxm_init()
     for (i = 0; i < VITA_GXM_BUFFERS; i++) {
 
         // allocate memory for display
-        data->displayBufferData[i] = gpu_alloc_mapped_aligned(16*1024, 4 * VITA_GXM_SCREEN_STRIDE * VITA_GXM_SCREEN_HEIGHT, VGL_MEM_VRAM);
+        data->displayBufferData[i] = gpu_alloc_mapped_aligned(4096, 4 * VITA_GXM_SCREEN_STRIDE * VITA_GXM_SCREEN_HEIGHT, VITA_MEM_VRAM);
 
         // memset the buffer to black
         SDL_memset(data->displayBufferData[i], 0, VITA_GXM_SCREEN_HEIGHT * VITA_GXM_SCREEN_STRIDE * 4);
@@ -255,10 +255,10 @@ int gxm_init()
     unsigned int depthStrideInSamples = alignedWidth;
 
     // allocate the depth buffer
-    data->depthBufferData = gpu_alloc_mapped_aligned(SCE_GXM_DEPTHSTENCIL_SURFACE_ALIGNMENT, 4 * sampleCount, use_vram ? VGL_MEM_VRAM : VGL_MEM_RAM);
+    data->depthBufferData = gpu_alloc_mapped_aligned(SCE_GXM_DEPTHSTENCIL_SURFACE_ALIGNMENT, 4 * sampleCount, use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
 
     // allocate the stencil buffer
-    data->stencilBufferData = gpu_alloc_mapped_aligned(SCE_GXM_DEPTHSTENCIL_SURFACE_ALIGNMENT, 4 * sampleCount, use_vram ? VGL_MEM_VRAM : VGL_MEM_RAM);
+    data->stencilBufferData = gpu_alloc_mapped_aligned(SCE_GXM_DEPTHSTENCIL_SURFACE_ALIGNMENT, 4 * sampleCount, use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
 
     // create the SceGxmDepthStencilSurface structure
     err = sceGxmDepthStencilSurfaceInit(
@@ -288,7 +288,7 @@ int gxm_init()
     const unsigned int patcherFragmentUsseSize  = 64*1024;
 
     // allocate memory for buffers and USSE code
-    data->patcherBuffer = gpu_alloc_mapped_aligned(4096, patcherBufferSize, use_vram ? VGL_MEM_VRAM : VGL_MEM_RAM);
+    data->patcherBuffer = gpu_alloc_mapped_aligned(4096, patcherBufferSize, use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
 
     unsigned int patcherVertexUsseOffset;
     data->patcherVertexUsse = gpu_vertex_usse_alloc_mapped(patcherVertexUsseSize, &patcherVertexUsseOffset);
@@ -417,7 +417,7 @@ int gxm_init()
         }
 
         // create the clear triangle vertex/index data
-        data->clearVertices = (clear_vertex *)gpu_alloc_mapped_aligned(4096, 3*sizeof(clear_vertex), use_vram ? VGL_MEM_VRAM : VGL_MEM_RAM);
+        data->clearVertices = (clear_vertex *)gpu_alloc_mapped_aligned(4096, 3*sizeof(clear_vertex), use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
 
         data->clearVertices[0].x = -1.0f;
         data->clearVertices[0].y = -1.0f;
@@ -430,7 +430,7 @@ int gxm_init()
     // Allocate a 4 * 2 bytes = 8 bytes buffer and store all possible
     // 16-bit indices in linear ascending order, so we can use this for
     // all drawing operations where we don't want to use indexing.
-    data->linearIndices = (uint16_t *)gpu_alloc_mapped_aligned(sizeof(uint16_t), 4*sizeof(uint16_t), use_vram ? VGL_MEM_VRAM : VGL_MEM_RAM);
+    data->linearIndices = (uint16_t *)gpu_alloc_mapped_aligned(sizeof(uint16_t), 4*sizeof(uint16_t), use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
 
     for (uint16_t i = 0; i < 4; ++i)
     {
@@ -505,7 +505,7 @@ int gxm_init()
     data->clearClearColorParam = (SceGxmProgramParameter *)sceGxmProgramFindParameterByName(clearFragmentProgramGxp, "uClearColor");
 
     // Allocate memory for screen vertices
-    data->screenVertices = gpu_alloc_mapped_aligned(sizeof(texture_vertex), 4*sizeof(texture_vertex), VGL_MEM_EXTERNAL);
+    data->screenVertices = gpu_alloc_mapped_aligned(sizeof(texture_vertex), 4*sizeof(texture_vertex), use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
 
     init_orthographic_matrix(data->ortho_matrix, -1.0f, 1.0f, -1.0f, 1.0f, 0.0f, 1.0f);
 
@@ -636,7 +636,7 @@ void *gxm_texture_get_palette(const gxm_texture *texture)
     return sceGxmTextureGetPalette(&texture->gxm_tex);
 }
 
-void gxm_texture_set_alloc_memblock_type(vglMemType type)
+void gxm_texture_set_alloc_memblock_type(VitaMemType type)
 {
     textureMemBlockType = type;
 }
@@ -666,7 +666,7 @@ gxm_texture* create_gxm_texture(unsigned int w, unsigned int h, SceGxmTextureFor
     if ((format & 0x9f000000U) == SCE_GXM_TEXTURE_BASE_FORMAT_P8) {
         const int pal_size = 256 * sizeof(uint32_t);
 
-        texture->palette = gpu_alloc_mapped_aligned(SCE_GXM_PALETTE_ALIGNMENT, pal_size, VGL_MEM_VRAM);
+        texture->palette = gpu_alloc_mapped_aligned(SCE_GXM_PALETTE_ALIGNMENT, pal_size, VITA_MEM_VRAM);
 
         if (!texture->palette) {
             free_gxm_texture(texture);
@@ -990,11 +990,13 @@ void gxm_minimal_init_for_common_dialog(void)
     initializeParams.displayQueueCallbackDataSize   = sizeof(VITA_GXM_DisplayData);
     initializeParams.parameterBufferSize            = SCE_GXM_DEFAULT_PARAMETER_BUFFER_SIZE;
     sceGxmInitialize(&initializeParams);
+    vgl_mem_init(0, 32 * 1024 * 1024, 0);
 }
 
 void gxm_minimal_term_for_common_dialog(void)
 {
     sceGxmTerminate();
+    vgl_mem_term();
 }
 
 void gxm_init_for_common_dialog(void)
@@ -1003,9 +1005,9 @@ void gxm_init_for_common_dialog(void)
     {
         buffer_for_common_dialog[i].displayData.vblank_wait = SDL_TRUE;
         buffer_for_common_dialog[i].displayData.address = gpu_alloc_mapped_aligned(
-            16 * 1024,
+            4096,
             4 * VITA_GXM_SCREEN_STRIDE * VITA_GXM_SCREEN_HEIGHT,
-            VGL_MEM_RAM);
+            use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
 
         sceGxmColorSurfaceInit(
             &buffer_for_common_dialog[i].surf,

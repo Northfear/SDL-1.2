@@ -42,9 +42,9 @@ Enables or disables bilinear filtering on scaled screen surface.
 
 Enables or disables vsync.
 
-```void SDL_VITA_SetTextureAllocMemblockType(vglMemType type);```
+```void SDL_VITA_SetTextureAllocMemblockType(VitaMemType type);```
 
-Sets type of memory block for all new hardware surface allocations. ```VGL_MEM_VRAM``` is the default one. Depending on a game ```VGL_MEM_RAM``` or ```VGL_MEM_EXTERNAL``` might provide a bit better (or worse) performance. Set memblock type before display/surface creation.
+Sets type of memory block for all new hardware surface allocations. ```VITA_MEM_VRAM``` is the default one. Depending on a game ```VITA_MEM_RAM``` or ```VITA_MEM_RAM_CACHED``` might provide a bit better (or worse) performance. Set memblock type before display/surface creation.
 
 ```void SDL_VITA_ShowScreenKeyboard(const char *initialText, bool clearText);```
 
@@ -62,7 +62,7 @@ Displays message box with one button and pre-defined text.
 
 Mixed usage of ```SDL_SWSURFACE``` and ```SDL_HWSURFACE``` (for screen/surfaces) might result in decreased performance.
 
-Hardware surfaces with memblock type ```VGL_MEM_RAM``` or ```VGL_MEM_EXTERNAL``` can provide better performance in case of a big number of CPU read/writes on the surface.
+Hardware surfaces with memblock type ```VITA_MEM_RAM``` or ```VITA_MEM_RAM_CACHED``` can provide better performance in case of a big number of CPU read/writes on the surface.
 
 Generally performance of ```SDL_HWSURFACE``` is somewhat faster with hardware acceleration enabled. Direct pixel access (e.g. surface->pixels) might drop it dramatically.
 

@@ -630,7 +630,7 @@ void SDL_VITA_SetVideoModeSync(int enable_vsync)
 }
 
 // custom vita function for setting mem type for new hw texture allocations
-void SDL_VITA_SetTextureAllocMemblockType(vglMemType type)
+void SDL_VITA_SetTextureAllocMemblockType(VitaMemType type)
 {
     gxm_texture_set_alloc_memblock_type(type);
 }
