@@ -28,15 +28,14 @@
 #include <psp2/kernel/sysmem.h>
 #include <psp2/kernel/clib.h>
 
+#define RAM_ON_DEMAND
+
 static void *mempool_mspace[4] = {NULL, NULL, NULL, NULL}; // mspace creations (VRAM, RAM, PHYCONT RAM, EXTERNAL)
 static void *mempool_addr[4] = {NULL, NULL, NULL, NULL}; // addresses of heap memblocks (VRAM, RAM, PHYCONT RAM, EXTERNAL)
 static SceUID mempool_id[4] = {0, 0, 0, 0}; // UIDs of heap memblocks (VRAM, RAM, PHYCONT RAM, EXTERNAL)
 static size_t mempool_size[4] = {0, 0, 0, 0}; // sizes of heap memlbocks (VRAM, RAM, PHYCONT RAM, EXTERNAL)
 
 static int mempool_initialized = 0;
-
-#define PHYCONT_ON_DEMAND
-#define MEM_ALIGNMENT 16
 
 // VRAM usage setting
 uint8_t use_vram_for_usse = 0;
@@ -45,10 +44,10 @@ uint8_t use_vram_for_usse = 0;
 uint8_t use_extra_mem = 1;
 
 
-#ifdef PHYCONT_ON_DEMAND
-void *vgl_alloc_phycont_block(uint32_t size) {
-    size = ALIGN(size, 1024 * 1024);
-    SceUID blk = sceKernelAllocMemBlock("phycont_blk", SCE_KERNEL_MEMBLOCK_TYPE_USER_MAIN_PHYCONT_NC_RW, size, NULL);
+#ifdef RAM_ON_DEMAND
+void *vgl_alloc_ram_block(uint32_t size) {
+    size = ALIGN(size, 4 * 1024);
+    SceUID blk = sceKernelAllocMemBlock("rw_uncache_blk", SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE, size, NULL);
 
     if (blk < 0)
         return NULL;
@@ -66,6 +65,8 @@ void vgl_mem_term(void) {
         return;
 
     for (int i = 0; i < VGL_MEM_EXTERNAL; i++) {
+        if (!mempool_id[i])
+            continue;
         sceClibMspaceDestroy(mempool_mspace[i]);
         sceKernelFreeMemBlock(mempool_id[i]);
         mempool_mspace[i] = NULL;
@@ -85,11 +86,11 @@ void vgl_mem_init(size_t size_ram, size_t size_cdram, size_t size_phycont) {
         size_ram = 0xC800000;
 
     mempool_size[VGL_MEM_VRAM] = ALIGN(size_cdram, 256 * 1024);
-    mempool_size[VGL_MEM_RAM] = ALIGN(size_ram, 4 * 1024);
-#ifdef PHYCONT_ON_DEMAND
-    mempool_size[VGL_MEM_PHYCONT] = 0;
-#else
     mempool_size[VGL_MEM_PHYCONT] = ALIGN(size_phycont, 1024 * 1024);
+#ifdef RAM_ON_DEMAND
+    mempool_size[VGL_MEM_RAM] = 0;
+#else
+    mempool_size[VGL_MEM_RAM] = ALIGN(size_ram, 4 * 1024);
 #endif
 
     if (mempool_size[VGL_MEM_VRAM])
@@ -111,13 +112,13 @@ void vgl_mem_init(size_t size_ram, size_t size_cdram, size_t size_phycont) {
         }
     }
 
-#ifdef PHYCONT_ON_DEMAND
+#ifdef RAM_ON_DEMAND
     {
-        // Getting total available phycont mem
+        // Getting total available mem
         SceKernelFreeMemorySizeInfo info;
         info.size = sizeof(SceKernelFreeMemorySizeInfo);
         sceKernelGetFreeMemorySize(&info);
-        mempool_size[VGL_MEM_PHYCONT] = info.size_phycont;
+        mempool_size[VGL_MEM_RAM] = info.size_user;
     }
 #endif
 
@@ -139,55 +140,27 @@ void vgl_mem_init(size_t size_ram, size_t size_cdram, size_t size_phycont) {
 vglMemType vgl_mem_get_type_by_addr(void *addr) {
     if (addr >= mempool_addr[VGL_MEM_VRAM] && (addr < mempool_addr[VGL_MEM_VRAM] + mempool_size[VGL_MEM_VRAM]))
         return VGL_MEM_VRAM;
+#ifndef RAM_ON_DEMAND
     else if (addr >= mempool_addr[VGL_MEM_RAM] && (addr < mempool_addr[VGL_MEM_RAM] + mempool_size[VGL_MEM_RAM]))
         return VGL_MEM_RAM;
-#ifndef PHYCONT_ON_DEMAND
+#endif
     else if (addr >= mempool_addr[VGL_MEM_PHYCONT] && (addr < mempool_addr[VGL_MEM_PHYCONT] + mempool_size[VGL_MEM_PHYCONT]))
         return VGL_MEM_PHYCONT;
-#endif
     else if (addr >= mempool_addr[VGL_MEM_EXTERNAL] && (addr < mempool_addr[VGL_MEM_EXTERNAL] + mempool_size[VGL_MEM_EXTERNAL]))
         return VGL_MEM_EXTERNAL;
-#ifdef PHYCONT_ON_DEMAND
-    return VGL_MEM_PHYCONT;
+#ifdef RAM_ON_DEMAND
+    return VGL_MEM_RAM;
 #else
     return -1;
 #endif
-}
-
-size_t vgl_mem_get_total_space(vglMemType type) {
-    if (type == VGL_MEM_ALL) {
-        size_t size = 0;
-        for (int i = 0; i < VGL_MEM_EXTERNAL; i++) {
-            size += vgl_mem_get_total_space(i);
-        }
-        return size;
-    } else {
-        return mempool_size[type];
-    }
-}
-
-size_t vgl_malloc_usable_size(void *ptr) {
-    vglMemType type = vgl_mem_get_type_by_addr(ptr);
-    if (type == VGL_MEM_EXTERNAL)
-        return 0;
-#ifdef PHYCONT_ON_DEMAND
-    else if (type == VGL_MEM_PHYCONT) {
-        SceKernelMemBlockInfo info;
-        info.size = sizeof(SceKernelMemBlockInfo);
-        int err = sceKernelGetMemBlockInfoByAddr(ptr, &info);
-        return info.mappedSize;
-    }
-#endif
-    else
-        return sceClibMspaceMallocUsableSize(ptr);
 }
 
 void vgl_free(void *ptr) {
     vglMemType type = vgl_mem_get_type_by_addr(ptr);
     if (type == VGL_MEM_EXTERNAL)
         free(ptr);
-#ifdef PHYCONT_ON_DEMAND
-    else if (type == VGL_MEM_PHYCONT) {
+#ifdef RAM_ON_DEMAND
+    else if (type == VGL_MEM_RAM) {
         sceGxmUnmapMemory(ptr);
         sceKernelFreeMemBlock(sceKernelFindMemBlockByAddr(ptr, 0));
     }
@@ -196,60 +169,15 @@ void vgl_free(void *ptr) {
         sceClibMspaceFree(mempool_mspace[type], ptr);
 }
 
-void *vgl_malloc(size_t size, vglMemType type) {
-    if (type == VGL_MEM_EXTERNAL)
-        return malloc(size);
-#ifdef PHYCONT_ON_DEMAND
-    else if (type == VGL_MEM_PHYCONT)
-        return vgl_alloc_phycont_block(size);
-#endif
-    else if (mempool_mspace[type])
-        return sceClibMspaceMalloc(mempool_mspace[type], size);
-    return NULL;
-}
-
-void *vgl_calloc(size_t num, size_t size, vglMemType type) {
-    if (type == VGL_MEM_EXTERNAL)
-        return calloc(num, size);
-#ifdef PHYCONT_ON_DEMAND
-    else if (type == VGL_MEM_PHYCONT)
-        return vgl_alloc_phycont_block(num * size);
-#endif
-    else if (mempool_mspace[type])
-        return sceClibMspaceCalloc(mempool_mspace[type], num, size);
-    return NULL;
-}
-
 void *vgl_memalign(size_t alignment, size_t size, vglMemType type) {
     if (type == VGL_MEM_EXTERNAL)
         return memalign(alignment, size);
-#ifdef PHYCONT_ON_DEMAND
-    else if (type == VGL_MEM_PHYCONT)
-        return vgl_alloc_phycont_block(size);
+#ifdef RAM_ON_DEMAND
+    else if (type == VGL_MEM_RAM)
+        return vgl_alloc_ram_block(size);
 #endif
     else if (mempool_mspace[type])
         return sceClibMspaceMemalign(mempool_mspace[type], alignment, size);
-    return NULL;
-}
-
-void *vgl_realloc(void *ptr, size_t size) {
-    vglMemType type = vgl_mem_get_type_by_addr(ptr);
-    if (type == VGL_MEM_EXTERNAL)
-        return realloc(ptr, size);
-#ifdef PHYCONT_ON_DEMAND
-    else if (type == VGL_MEM_PHYCONT) {
-        if (vgl_malloc_usable_size(ptr) >= size)
-            return ptr;
-        void *res = vgl_alloc_phycont_block(size);
-        if (res) {
-            sceClibMemcpy(res, ptr, size);
-            vgl_free(ptr);
-            return res;
-        }
-    }
-#endif
-    else if (mempool_mspace[type])
-        return sceClibMspaceRealloc(mempool_mspace[type], ptr, size);
     return NULL;
 }
 
@@ -259,23 +187,20 @@ void *gpu_alloc_mapped_aligned(size_t alignment, size_t size, vglMemType type) {
     if (res)
         return res;
 
-    if (type != VGL_MEM_VRAM) {
-        // Requested memory type finished, using other one
-        res = vgl_memalign(alignment, size, VGL_MEM_VRAM);
+    if (type != VGL_MEM_PHYCONT) {
+        res = vgl_memalign(alignment, size, VGL_MEM_PHYCONT);
         if (res)
             return res;
     }
 
     if (type != VGL_MEM_RAM) {
-        // Requested memory type finished, using other one
         res = vgl_memalign(alignment, size, VGL_MEM_RAM);
         if (res)
             return res;
     }
 
-    if (type != VGL_MEM_PHYCONT) {
-        // Even the other one failed, using our last resort
-        res = vgl_memalign(alignment, size, VGL_MEM_PHYCONT);
+    if (type != VGL_MEM_VRAM) {
+        res = vgl_memalign(alignment, size, VGL_MEM_VRAM);
         if (res)
             return res;
     }
@@ -286,16 +211,7 @@ void *gpu_alloc_mapped_aligned(size_t alignment, size_t size, vglMemType type) {
             res = vgl_memalign(alignment, size, VGL_MEM_EXTERNAL);
     }
 
-#ifdef LOG_ERRORS
-    if (!res)
-        vgl_log("gpu_alloc_mapped_aligned failed with a requested size of 0x%08X\n", size);
-#endif
-
     return res;
-}
-
-void *gpu_alloc_mapped(size_t size, vglMemType type) {
-    return gpu_alloc_mapped_aligned(MEM_ALIGNMENT, size, type);
 }
 
 void *gpu_vertex_usse_alloc_mapped(size_t size, unsigned int *usse_offset) {
@@ -312,6 +228,14 @@ void *gpu_vertex_usse_alloc_mapped(size_t size, unsigned int *usse_offset) {
 void gpu_vertex_usse_free_mapped(void *addr) {
     // Unmapping memblock from sceGxm as vertex USSE memory
     sceGxmUnmapVertexUsseMemory(addr);
+
+#ifdef RAM_ON_DEMAND
+    if (!use_vram_for_usse)
+    {
+        sceKernelFreeMemBlock(sceKernelFindMemBlockByAddr(addr, 0));
+        return;
+    }
+#endif
 
     // Deallocating memblock
     vgl_free(addr);
@@ -331,6 +255,14 @@ void *gpu_fragment_usse_alloc_mapped(size_t size, unsigned int *usse_offset) {
 void gpu_fragment_usse_free_mapped(void *addr) {
     // Unmapping memblock from sceGxm as fragment USSE memory
     sceGxmUnmapFragmentUsseMemory(addr);
+
+#ifdef RAM_ON_DEMAND
+    if (!use_vram_for_usse)
+    {
+        sceKernelFreeMemBlock(sceKernelFindMemBlockByAddr(addr, 0));
+        return;
+    }
+#endif
 
     // Deallocating memblock
     vgl_free(addr);

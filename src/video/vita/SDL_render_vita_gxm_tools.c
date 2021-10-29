@@ -158,7 +158,6 @@ int gxm_init()
     info.size = sizeof(SceKernelFreeMemorySizeInfo);
     sceKernelGetFreeMemorySize(&info);
     int ram_threshold = 0x1000000;
-    //int ram_threshold = 0;
     int cdram_threshold = 256 * 1024;
     int phycont_threshold = 1 * 1024 * 1024;
     size_t ram_size = info.size_user > ram_threshold ? info.size_user - ram_threshold : info.size_user;
@@ -1005,7 +1004,7 @@ void gxm_init_for_common_dialog(void)
         buffer_for_common_dialog[i].displayData.address = gpu_alloc_mapped_aligned(
             16 * 1024,
             4 * VITA_GXM_SCREEN_STRIDE * VITA_GXM_SCREEN_HEIGHT,
-            VGL_MEM_PHYCONT);
+            VGL_MEM_RAM);
 
         sceGxmColorSurfaceInit(
             &buffer_for_common_dialog[i].surf,

@@ -31,17 +31,11 @@
 
 void vgl_mem_init(size_t size_ram, size_t size_cdram, size_t size_phycont);
 void vgl_mem_term(void);
-size_t vgl_mem_get_total_space(vglMemType type);
 
-size_t vgl_malloc_usable_size(void *ptr);
-void *vgl_malloc(size_t size, vglMemType type);
-void *vgl_calloc(size_t num, size_t size, vglMemType type);
 void *vgl_memalign(size_t alignment, size_t size, vglMemType type);
-void *vgl_realloc(void *ptr, size_t size);
 void vgl_free(void *ptr);
 
 void *gpu_alloc_mapped_aligned(size_t alignment, size_t size, vglMemType type);
-void *gpu_alloc_mapped(size_t size, vglMemType type);
 void *gpu_vertex_usse_alloc_mapped(size_t size, unsigned int *usse_offset);
 void gpu_vertex_usse_free_mapped(void *addr);
 void *gpu_fragment_usse_alloc_mapped(size_t size, unsigned int *usse_offset);
