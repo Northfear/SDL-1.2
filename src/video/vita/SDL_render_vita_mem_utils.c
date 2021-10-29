@@ -38,7 +38,7 @@ static size_t mempool_size[4] = {0, 0, 0, 0}; // sizes of heap memlbocks (VRAM, 
 static int mempool_initialized = 0;
 
 // VRAM usage setting
-uint8_t use_vram_for_usse = 0;
+uint8_t use_vram_for_usse = 1;
 
 // Newlib mempool usage setting
 uint8_t use_extra_mem = 1;

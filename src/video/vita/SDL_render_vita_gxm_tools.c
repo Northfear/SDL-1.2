@@ -41,6 +41,7 @@ static vglMemType textureMemBlockType = VGL_MEM_VRAM;
 volatile unsigned int *notificationMem;
 SceGxmNotification flipFragmentNotif;
 gxm_texture *lastScreenTexture = NULL;
+uint8_t use_vram = 1;
 
 #ifdef VITA_HW_ACCEL
 #define NOTIF_NUM 512
@@ -167,9 +168,9 @@ int gxm_init()
     vgl_mem_init(ram_size, cdram_size, phycont_size);
 
     // allocate ring buffer memory using default sizes
-    data->vdmRingBuffer = gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_VDM_RING_BUFFER_SIZE, VGL_MEM_RAM);
-    data->vertexRingBuffer = gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_VERTEX_RING_BUFFER_SIZE, VGL_MEM_RAM);
-    data->fragmentRingBuffer = gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_FRAGMENT_RING_BUFFER_SIZE, VGL_MEM_RAM);
+    data->vdmRingBuffer = gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_VDM_RING_BUFFER_SIZE, use_vram ? VGL_MEM_VRAM : VGL_MEM_RAM);
+    data->vertexRingBuffer = gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_VERTEX_RING_BUFFER_SIZE, use_vram ? VGL_MEM_VRAM : VGL_MEM_RAM);
+    data->fragmentRingBuffer = gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_FRAGMENT_RING_BUFFER_SIZE, use_vram ? VGL_MEM_VRAM : VGL_MEM_RAM);
 
     unsigned int fragmentUsseRingBufferOffset;
     data->fragmentUsseRingBuffer = gpu_fragment_usse_alloc_mapped(SCE_GXM_DEFAULT_FRAGMENT_USSE_RING_BUFFER_SIZE, &fragmentUsseRingBufferOffset);
@@ -254,10 +255,10 @@ int gxm_init()
     unsigned int depthStrideInSamples = alignedWidth;
 
     // allocate the depth buffer
-    data->depthBufferData = gpu_alloc_mapped_aligned(SCE_GXM_DEPTHSTENCIL_SURFACE_ALIGNMENT, 4 * sampleCount, VGL_MEM_RAM);
+    data->depthBufferData = gpu_alloc_mapped_aligned(SCE_GXM_DEPTHSTENCIL_SURFACE_ALIGNMENT, 4 * sampleCount, use_vram ? VGL_MEM_VRAM : VGL_MEM_RAM);
 
     // allocate the stencil buffer
-    data->stencilBufferData = gpu_alloc_mapped_aligned(SCE_GXM_DEPTHSTENCIL_SURFACE_ALIGNMENT, 4 * sampleCount, VGL_MEM_RAM);
+    data->stencilBufferData = gpu_alloc_mapped_aligned(SCE_GXM_DEPTHSTENCIL_SURFACE_ALIGNMENT, 4 * sampleCount, use_vram ? VGL_MEM_VRAM : VGL_MEM_RAM);
 
     // create the SceGxmDepthStencilSurface structure
     err = sceGxmDepthStencilSurfaceInit(
@@ -287,7 +288,7 @@ int gxm_init()
     const unsigned int patcherFragmentUsseSize  = 64*1024;
 
     // allocate memory for buffers and USSE code
-    data->patcherBuffer = gpu_alloc_mapped_aligned(4096, patcherBufferSize, VGL_MEM_RAM);
+    data->patcherBuffer = gpu_alloc_mapped_aligned(4096, patcherBufferSize, use_vram ? VGL_MEM_VRAM : VGL_MEM_RAM);
 
     unsigned int patcherVertexUsseOffset;
     data->patcherVertexUsse = gpu_vertex_usse_alloc_mapped(patcherVertexUsseSize, &patcherVertexUsseOffset);
@@ -416,7 +417,7 @@ int gxm_init()
         }
 
         // create the clear triangle vertex/index data
-        data->clearVertices = (clear_vertex *)gpu_alloc_mapped_aligned(4096, 3*sizeof(clear_vertex), VGL_MEM_RAM);
+        data->clearVertices = (clear_vertex *)gpu_alloc_mapped_aligned(4096, 3*sizeof(clear_vertex), use_vram ? VGL_MEM_VRAM : VGL_MEM_RAM);
 
         data->clearVertices[0].x = -1.0f;
         data->clearVertices[0].y = -1.0f;
@@ -429,7 +430,7 @@ int gxm_init()
     // Allocate a 4 * 2 bytes = 8 bytes buffer and store all possible
     // 16-bit indices in linear ascending order, so we can use this for
     // all drawing operations where we don't want to use indexing.
-    data->linearIndices = (uint16_t *)gpu_alloc_mapped_aligned(sizeof(uint16_t), 4*sizeof(uint16_t), VGL_MEM_RAM);
+    data->linearIndices = (uint16_t *)gpu_alloc_mapped_aligned(sizeof(uint16_t), 4*sizeof(uint16_t), use_vram ? VGL_MEM_VRAM : VGL_MEM_RAM);
 
     for (uint16_t i = 0; i < 4; ++i)
     {
