@@ -3,7 +3,7 @@
 ## Features
 
 - 1.2.16 version bump
-- Support of 8/15/16/24/32 bit surfaces
+- Support for 8/15/16/24/32 bit surfaces
 - Hardware accelerated blits and fills
 - Front touchpad support (Mouse emulation. Works with scaled/centered images)
 - Custom functions for on screen keyboard and message box (Backported from SDL2 Vita port)
@@ -14,7 +14,7 @@ To build and install SDL 1.2 use the following command
 
 ```make -f Makefile.vita install```
 
-HW accelerated blits/fills for ```SDL_HWSURFACE```s are enabled by default. To disable them use ```VITA_HW_ACCEL=0``` flag
+HW accelerated blits/fills for ```SDL_HWSURFACE``` are enabled by default. To disable them use ```VITA_HW_ACCEL=0``` flag
 
 ```make -f Makefile.vita VITA_HW_ACCEL=0 install```
 
