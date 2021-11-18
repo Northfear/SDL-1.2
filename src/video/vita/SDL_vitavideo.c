@@ -324,6 +324,7 @@ static int VITA_AllocHWSurface(_THIS, SDL_Surface *surface)
         break;
 
         case 16:
+            // use U5U6U5_RGB for a bit better compatibility with bad code (that might assume RBG format by default)
             surface->hwdata->texture =
                 create_gxm_texture(surface->w, surface->h, SCE_GXM_TEXTURE_FORMAT_U5U6U5_RGB);
         break;
@@ -409,13 +410,13 @@ static int VITA_FillHWRect(_THIS, SDL_Surface *dst, SDL_Rect *dstrect, Uint32 co
     }
 
     // fallback to SW fill for smaller fills
-    const int min_blit_size = 1024;
-    if (dst_rect.w * dst_rect.h <= min_blit_size && dst->format->BytesPerPixel != 3)
+    const int min_fill_size = 1024;
+    if (dst_rect.w * dst_rect.h <= min_fill_size && dst->format->BytesPerPixel != 3)
     {
         Uint8 *row = (Uint8 *)dst->pixels+dstrect->y*dst->pitch+
                 dstrect->x*dst->format->BytesPerPixel;
 
-        //lock before SW blit
+        //lock before SW fill
         gxm_lock_texture(dst_texture);
 
         void FillRect8ARMNEONAsm(int32_t w, int32_t h, uint8_t *dst, int32_t dst_stride, uint8_t src);

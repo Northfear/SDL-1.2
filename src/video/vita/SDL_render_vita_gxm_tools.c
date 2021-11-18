@@ -877,7 +877,9 @@ SceGxmTransferFormat gxm_texture_get_transferformat(const gxm_texture *texture)
     switch (texFormat)
     {
         case SCE_GXM_TEXTURE_FORMAT_P8_1BGR:
+        case SCE_GXM_TEXTURE_FORMAT_P8_1RGB:
         case SCE_GXM_TEXTURE_FORMAT_P8_ABGR:
+        case SCE_GXM_TEXTURE_FORMAT_P8_ARGB:
             transferFormat = SCE_GXM_TRANSFER_FORMAT_U8_R;
             break;
         case SCE_GXM_TEXTURE_FORMAT_U1U5U5U5_ABGR:
