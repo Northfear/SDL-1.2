@@ -5,27 +5,29 @@ CFLAGS  = -Ofast -mcpu=cortex-a9 -mfpu=neon -fgraphite-identity -floop-nest-opti
 $(INCLUDE) -lSceLibc_stub -Werror \
 -Dmemcpy=sceClibMemcpy -Dmemset=sceClibMemset -Dmemmove=sceClibMemmove -Dmemcmp=sceClibMemcmp
 
-ifeq ($(VITA_HW_ACCEL),1)
-CFLAGS += -DVITA_HW_ACCEL
-ifeq ($(VITA_BLIT_HW),1)
-CFLAGS += -DVITA_BLIT_HW=1
-endif
-ifeq ($(VITA_BLIT_HW_A),1)
-CFLAGS += -DVITA_BLIT_HW_A=1
-endif
-ifeq ($(VITA_FILL_HW),1)
-CFLAGS += -DVITA_FILL_HW=1
-endif
+HW_FLAGS = -DVITA_HW_ACCEL 
+
+ifeq ($(VITA_HW_ACCEL),0)
+HW_FLAGS =
+else
 ifeq ($(VITA_BLIT_HW),0)
-CFLAGS += -DVITA_BLIT_HW=0
+HW_FLAGS += -DVITA_BLIT_HW=0
+else
+HW_FLAGS += -DVITA_BLIT_HW=1
 endif
 ifeq ($(VITA_BLIT_HW_A),0)
-CFLAGS += -DVITA_BLIT_HW_A=0
+HW_FLAGS += -DVITA_BLIT_HW_A=0
+else
+HW_FLAGS += -DVITA_BLIT_HW_A=1
 endif
 ifeq ($(VITA_FILL_HW),0)
-CFLAGS += -DVITA_FILL_HW=0
+HW_FLAGS += -DVITA_FILL_HW=0
+else
+HW_FLAGS += -DVITA_FILL_HW=1
 endif
 endif
+
+CFLAGS += $(HW_FLAGS)
 
 CC	= arm-vita-eabi-gcc
 AR	= arm-vita-eabi-gcc-ar

@@ -14,17 +14,17 @@ To build and install SDL 1.2 use the following command
 
 ```make -f Makefile.vita install```
 
-To enable hardware acceleration use ```VITA_HW_ACCEL=1``` flag
+HW accelerated blits/fills for ```SDL_HWSURFACE```s are enabled by default. To disable them use ```VITA_HW_ACCEL=0``` flag
 
-```make -f Makefile.vita VITA_HW_ACCEL=1 install```
+```make -f Makefile.vita VITA_HW_ACCEL=0 install```
 
-You can choose which functions are accelerated by using the following flags together with ```VITA_HW_ACCEL=1```.
+You can disable individual hardware accelerated functions by using the following flags:
 
-`VITA_BLIT_HW=1` Enables accelerated blits (enabled by default).
+`VITA_BLIT_HW=0` Disables accelerated blits.
 
-`VITA_BLIT_HW_A=1` Enables accelerated alpha blits (only full transparency is supported, enabled by default).
+`VITA_BLIT_HW_A=0` Disables accelerated alpha blits (only full transparency is supported).
 
-`VITA_FILL_HW=1` Enables accelerated fills (enabled by default).
+`VITA_FILL_HW=0` Disables accelerated fills.
 
 ## Custom functions
 
@@ -36,7 +36,7 @@ Sets position of screen surface and it's dimension.
 
 ```void SDL_VITA_SetVideoModeBilinear(int enable_bilinear);```
 
-Enables or disables bilinear filtering on scaled screen surface.
+Enables or disables bilinear filtering for scaled screen surface.
 
 ```void SDL_VITA_SetVideoModeSync(int enable_vsync);```
 
@@ -66,7 +66,7 @@ Hardware surfaces with memblock type ```VITA_MEM_RAM``` or ```VITA_MEM_RAM_CACHE
 
 Generally performance of ```SDL_HWSURFACE``` is somewhat faster with hardware acceleration enabled. Direct pixel access (e.g. surface->pixels) might drop it dramatically.
 
-Alpha blits are limited to full (colorkey-like) transparency only. It might be a good idea to disable them during the build (with `VITA_BLIT_HW_A=0` flag) if the game requires partial transparency.
+Alpha blits are limited to full (colorkey-like) transparency only. It might be a good idea to disable them during the build (with `VITA_BLIT_HW_A=0` flag) or use ```SDL_SWSURFACE``` if the game requires partial transparency.
 
 ## Thanks to:
 - isage for [SDL2 gxm port](https://github.com/isage/SDL-mirror)
