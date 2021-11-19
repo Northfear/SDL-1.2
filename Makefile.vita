@@ -1,7 +1,7 @@
 # Makefile to build the SDL library
 
 INCLUDE = -I./include
-CFLAGS  = -Ofast -mcpu=cortex-a9 -mfpu=neon -fgraphite-identity -floop-nest-optimize \
+CFLAGS  = -O3 -mcpu=cortex-a9 -mfpu=neon \
 $(INCLUDE) -lSceLibc_stub -Werror \
 -Dmemcpy=sceClibMemcpy -Dmemset=sceClibMemset -Dmemmove=sceClibMemmove -Dmemcmp=sceClibMemcmp
 
