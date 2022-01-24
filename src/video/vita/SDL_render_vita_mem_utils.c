@@ -65,7 +65,7 @@ void vgl_mem_term(void) {
     if (!mempool_initialized)
         return;
 
-    for (int i = 0; i < VGL_MEM_EXTERNAL; i++) {
+    for (int i = 0; i < VITA_MEM_EXTERNAL; i++) {
         if (!mempool_id[i])
             continue;
         sceClibMspaceDestroy(mempool_mspace[i]);
@@ -99,7 +99,7 @@ void vgl_mem_init(size_t size_ram, size_t size_cdram, size_t size_phycont) {
     if (mempool_size[VITA_MEM_PHYCONT])
         mempool_id[VITA_MEM_PHYCONT] = sceKernelAllocMemBlock("phycont_mempool", SCE_KERNEL_MEMBLOCK_TYPE_USER_MAIN_PHYCONT_NC_RW, mempool_size[VITA_MEM_PHYCONT], NULL);
 
-    for (int i = 0; i < VGL_MEM_EXTERNAL; i++) {
+    for (int i = 0; i < VITA_MEM_EXTERNAL; i++) {
         if (mempool_size[i]) {
             mempool_addr[i] = NULL;
             sceKernelGetMemBlockBase(mempool_id[i], &mempool_addr[i]);
@@ -131,8 +131,8 @@ void vgl_mem_init(size_t size_ram, size_t size_cdram, size_t size_phycont) {
     int err = sceKernelGetMemBlockInfoByAddr(dummy, &info);
     sceGxmMapMemory(info.mappedBase, info.mappedSize, SCE_GXM_MEMORY_ATTRIB_READ | SCE_GXM_MEMORY_ATTRIB_WRITE);
 
-    mempool_size[VGL_MEM_EXTERNAL] = info.mappedSize;
-    mempool_addr[VGL_MEM_EXTERNAL] = info.mappedBase;
+    mempool_size[VITA_MEM_EXTERNAL] = info.mappedSize;
+    mempool_addr[VITA_MEM_EXTERNAL] = info.mappedBase;
 #endif
 
     mempool_initialized = 1;
@@ -148,8 +148,8 @@ VitaMemType vgl_mem_get_type_by_addr(void *addr) {
         return VITA_MEM_RAM;
 #endif
 #ifdef MAP_NEWLIB_MEM
-    else if (addr >= mempool_addr[VGL_MEM_EXTERNAL] && (addr < mempool_addr[VGL_MEM_EXTERNAL] + mempool_size[VGL_MEM_EXTERNAL]))
-        return VGL_MEM_EXTERNAL;
+    else if (addr >= mempool_addr[VITA_MEM_EXTERNAL] && (addr < mempool_addr[VITA_MEM_EXTERNAL] + mempool_size[VITA_MEM_EXTERNAL]))
+        return VITA_MEM_EXTERNAL;
 #endif
 #ifdef RAM_ON_DEMAND
     return VITA_MEM_RAM;
@@ -169,7 +169,7 @@ void vgl_free(void *ptr) {
     }
 #endif
 #ifdef MAP_NEWLIB_MEM
-    else if (type == VGL_MEM_EXTERNAL)
+    else if (type == VITA_MEM_EXTERNAL)
         free(ptr);
 #endif
 }
@@ -182,7 +182,7 @@ void *vgl_memalign(size_t alignment, size_t size, VitaMemType type) {
         return vgl_alloc_ram_block(size, type);
 #endif
 #ifdef MAP_NEWLIB_MEM
-    else if (type == VGL_MEM_EXTERNAL)
+    else if (type == VITA_MEM_EXTERNAL)
         return memalign(alignment, size);
 #endif
     return NULL;
@@ -217,9 +217,9 @@ void *gpu_alloc_mapped_aligned(size_t alignment, size_t size, VitaMemType type) 
             return res;
     }
 #ifdef MAP_NEWLIB_MEM
-    if (type != VGL_MEM_EXTERNAL) {
+    if (type != VITA_MEM_EXTERNAL) {
         // Internal mempool finished, using newlib mem
-        res = vgl_memalign(alignment, size, VGL_MEM_EXTERNAL);
+        res = vgl_memalign(alignment, size, VITA_MEM_EXTERNAL);
     }
 #endif
     return res;
