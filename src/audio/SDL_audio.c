@@ -274,7 +274,7 @@ static Uint16 SDL_ParseAudioFormat(const char *string)
 int SDL_AudioInit(const char *driver_name)
 {
 	SDL_AudioDevice *audio;
-	int i = 0, idx;
+	int i, idx;
 
 	/* Check to make sure we don't overwrite 'current_audio' */
 	if ( current_audio != NULL ) {
@@ -283,7 +283,7 @@ int SDL_AudioInit(const char *driver_name)
 
 	/* Select the proper audio driver */
 	audio = NULL;
-	idx = 0;
+	i = idx = 0;
 #if SDL_AUDIO_DRIVER_ESD
 	if ( (driver_name == NULL) && (SDL_getenv("ESPEAKER") != NULL) ) {
 		/* Ahem, we know that if ESPEAKER is set, user probably wants
@@ -351,9 +351,7 @@ int SDL_AudioInit(const char *driver_name)
 		}
 		if ( audio == NULL ) {
 			SDL_SetError("No available audio device");
-#if 0 /* Don't fail SDL_Init() if audio isn't available.
-         SDL_OpenAudio() will handle it at that point.  *sigh*
-       */
+#if 0 /* Don't fail SDL_Init() if audio isn't available. SDL_OpenAudio() will handle it at that point. sigh.. */
 			return(-1);
 #endif
 		}
@@ -684,4 +682,3 @@ void SDL_Audio_SetCaption(const char *caption)
 		current_audio->SetCaption(current_audio, caption);
 	}
 }
-
