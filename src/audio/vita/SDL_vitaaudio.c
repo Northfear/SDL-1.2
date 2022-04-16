@@ -151,15 +151,18 @@ static void VITAAUD_CloseAudio(_THIS)
 static int VITAAUD_OpenAudio(_THIS, SDL_AudioSpec *spec)
 {
     int format, mixlen, i, port = SCE_AUDIO_OUT_PORT_TYPE_MAIN;
+    Uint16 test_format;
 
-    switch (spec->format & 0xff) {
-        case 8:
-        case 16:
-            spec->format = AUDIO_S16LSB;
+    for (test_format = SDL_FirstAudioFormat(spec->format); test_format; test_format = SDL_NextAudioFormat()) {
+        if (test_format == AUDIO_S16LSB) {
+            spec->format = test_format;
             break;
-        default:
-            SDL_SetError("Unsupported audio format");
-            return -1;
+        }
+    }
+
+    if(!test_format) {
+        SDL_SetError("Unsupported audio format");
+        return -1;
     }
 
     /* The sample count must be a multiple of 64. */

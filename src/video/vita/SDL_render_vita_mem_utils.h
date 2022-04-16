@@ -29,16 +29,16 @@
 
 #define ALIGN(x, a) (((x) + ((a)-1)) & ~((a)-1))
 
-void vgl_mem_init(size_t size_ram, size_t size_cdram, size_t size_phycont);
-void vgl_mem_term(void);
+void vita_mem_init(size_t size_ram, size_t size_cdram, size_t size_phycont);
+void vita_mem_term(void);
 
-void *vgl_memalign(size_t alignment, size_t size, VitaMemType type);
-void vgl_free(void *ptr);
+void *vita_memalign(size_t alignment, size_t size, VitaMemType type);
+void vita_free(void *ptr);
 
-void *gpu_alloc_mapped_aligned(size_t alignment, size_t size, VitaMemType type);
-void *gpu_vertex_usse_alloc_mapped(size_t size, unsigned int *usse_offset);
-void gpu_vertex_usse_free_mapped(void *addr);
-void *gpu_fragment_usse_alloc_mapped(size_t size, unsigned int *usse_offset);
-void gpu_fragment_usse_free_mapped(void *addr);
+void *vita_gpu_alloc_mapped_aligned(size_t alignment, size_t size, VitaMemType type);
+void *vita_gpu_vertex_usse_alloc_mapped(size_t size, unsigned int *usse_offset);
+void vita_gpu_vertex_usse_free_mapped(void *addr);
+void *vita_gpu_fragment_usse_alloc_mapped(size_t size, unsigned int *usse_offset);
+void vita_gpu_fragment_usse_free_mapped(void *addr);
 
 #endif

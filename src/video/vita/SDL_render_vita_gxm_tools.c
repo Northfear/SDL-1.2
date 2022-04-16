@@ -165,15 +165,15 @@ int gxm_init()
     size_t cdram_size = info.size_cdram > cdram_threshold ? info.size_cdram - cdram_threshold : 0;
     size_t phycont_size = info.size_phycont > phycont_threshold ? info.size_phycont - phycont_threshold : 0;
 
-    vgl_mem_init(ram_size, cdram_size, phycont_size);
+    vita_mem_init(ram_size, cdram_size, phycont_size);
 
     // allocate ring buffer memory using default sizes
-    data->vdmRingBuffer = gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_VDM_RING_BUFFER_SIZE, use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
-    data->vertexRingBuffer = gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_VERTEX_RING_BUFFER_SIZE, use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
-    data->fragmentRingBuffer = gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_FRAGMENT_RING_BUFFER_SIZE, use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
+    data->vdmRingBuffer = vita_gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_VDM_RING_BUFFER_SIZE, use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
+    data->vertexRingBuffer = vita_gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_VERTEX_RING_BUFFER_SIZE, use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
+    data->fragmentRingBuffer = vita_gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_FRAGMENT_RING_BUFFER_SIZE, use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
 
     unsigned int fragmentUsseRingBufferOffset;
-    data->fragmentUsseRingBuffer = gpu_fragment_usse_alloc_mapped(SCE_GXM_DEFAULT_FRAGMENT_USSE_RING_BUFFER_SIZE, &fragmentUsseRingBufferOffset);
+    data->fragmentUsseRingBuffer = vita_gpu_fragment_usse_alloc_mapped(SCE_GXM_DEFAULT_FRAGMENT_USSE_RING_BUFFER_SIZE, &fragmentUsseRingBufferOffset);
 
     SDL_memset(&data->contextParams, 0, sizeof(SceGxmContextParams));
     data->contextParams.hostMem                       = SDL_malloc(SCE_GXM_MINIMUM_CONTEXT_HOST_MEM_SIZE);
@@ -216,7 +216,7 @@ int gxm_init()
     for (i = 0; i < VITA_GXM_BUFFERS; i++) {
 
         // allocate memory for display
-        data->displayBufferData[i] = gpu_alloc_mapped_aligned(4096, 4 * VITA_GXM_SCREEN_STRIDE * VITA_GXM_SCREEN_HEIGHT, VITA_MEM_VRAM);
+        data->displayBufferData[i] = vita_gpu_alloc_mapped_aligned(4096, 4 * VITA_GXM_SCREEN_STRIDE * VITA_GXM_SCREEN_HEIGHT, VITA_MEM_VRAM);
 
         // memset the buffer to black
         SDL_memset(data->displayBufferData[i], 0, VITA_GXM_SCREEN_HEIGHT * VITA_GXM_SCREEN_STRIDE * 4);
@@ -255,10 +255,10 @@ int gxm_init()
     unsigned int depthStrideInSamples = alignedWidth;
 
     // allocate the depth buffer
-    data->depthBufferData = gpu_alloc_mapped_aligned(SCE_GXM_DEPTHSTENCIL_SURFACE_ALIGNMENT, 4 * sampleCount, use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
+    data->depthBufferData = vita_gpu_alloc_mapped_aligned(SCE_GXM_DEPTHSTENCIL_SURFACE_ALIGNMENT, 4 * sampleCount, use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
 
     // allocate the stencil buffer
-    data->stencilBufferData = gpu_alloc_mapped_aligned(SCE_GXM_DEPTHSTENCIL_SURFACE_ALIGNMENT, 4 * sampleCount, use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
+    data->stencilBufferData = vita_gpu_alloc_mapped_aligned(SCE_GXM_DEPTHSTENCIL_SURFACE_ALIGNMENT, 4 * sampleCount, use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
 
     // create the SceGxmDepthStencilSurface structure
     err = sceGxmDepthStencilSurfaceInit(
@@ -288,13 +288,13 @@ int gxm_init()
     const unsigned int patcherFragmentUsseSize  = 64*1024;
 
     // allocate memory for buffers and USSE code
-    data->patcherBuffer = gpu_alloc_mapped_aligned(4096, patcherBufferSize, use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
+    data->patcherBuffer = vita_gpu_alloc_mapped_aligned(4096, patcherBufferSize, use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
 
     unsigned int patcherVertexUsseOffset;
-    data->patcherVertexUsse = gpu_vertex_usse_alloc_mapped(patcherVertexUsseSize, &patcherVertexUsseOffset);
+    data->patcherVertexUsse = vita_gpu_vertex_usse_alloc_mapped(patcherVertexUsseSize, &patcherVertexUsseOffset);
 
     unsigned int patcherFragmentUsseOffset;
-    data->patcherFragmentUsse = gpu_fragment_usse_alloc_mapped(patcherFragmentUsseSize, &patcherFragmentUsseOffset);
+    data->patcherFragmentUsse = vita_gpu_fragment_usse_alloc_mapped(patcherFragmentUsseSize, &patcherFragmentUsseOffset);
 
     // create a shader patcher
     SceGxmShaderPatcherParams patcherParams;
@@ -417,7 +417,7 @@ int gxm_init()
         }
 
         // create the clear triangle vertex/index data
-        data->clearVertices = (clear_vertex *)gpu_alloc_mapped_aligned(4096, 3*sizeof(clear_vertex), use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
+        data->clearVertices = (clear_vertex *)vita_gpu_alloc_mapped_aligned(4096, 3*sizeof(clear_vertex), use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
 
         data->clearVertices[0].x = -1.0f;
         data->clearVertices[0].y = -1.0f;
@@ -430,7 +430,7 @@ int gxm_init()
     // Allocate a 4 * 2 bytes = 8 bytes buffer and store all possible
     // 16-bit indices in linear ascending order, so we can use this for
     // all drawing operations where we don't want to use indexing.
-    data->linearIndices = (uint16_t *)gpu_alloc_mapped_aligned(sizeof(uint16_t), 4*sizeof(uint16_t), use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
+    data->linearIndices = (uint16_t *)vita_gpu_alloc_mapped_aligned(sizeof(uint16_t), 4*sizeof(uint16_t), use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
 
     for (uint16_t i = 0; i < 4; ++i)
     {
@@ -505,7 +505,7 @@ int gxm_init()
     data->clearClearColorParam = (SceGxmProgramParameter *)sceGxmProgramFindParameterByName(clearFragmentProgramGxp, "uClearColor");
 
     // Allocate memory for screen vertices
-    data->screenVertices = gpu_alloc_mapped_aligned(sizeof(texture_vertex), 4*sizeof(texture_vertex), use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
+    data->screenVertices = vita_gpu_alloc_mapped_aligned(sizeof(texture_vertex), 4*sizeof(texture_vertex), use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
 
     init_orthographic_matrix(data->ortho_matrix, -1.0f, 1.0f, -1.0f, 1.0f, 0.0f, 1.0f);
 
@@ -540,8 +540,8 @@ void gxm_finish()
     sceGxmShaderPatcherReleaseFragmentProgram(data->shaderPatcher, data->textureFragmentProgram);
     sceGxmShaderPatcherReleaseFragmentProgram(data->shaderPatcher, data->clearFragmentProgram);
 
-    vgl_free(data->linearIndices);
-    vgl_free(data->clearVertices);
+    vita_free(data->linearIndices);
+    vita_free(data->clearVertices);
 
     // wait until display queue is finished before deallocating display buffers
     sceGxmDisplayQueueFinish();
@@ -550,15 +550,15 @@ void gxm_finish()
     {
         // clear the buffer then deallocate
         SDL_memset(data->displayBufferData[i], 0, VITA_GXM_SCREEN_HEIGHT * VITA_GXM_SCREEN_STRIDE * 4);
-        vgl_free(data->displayBufferData[i]);
+        vita_free(data->displayBufferData[i]);
 
         // destroy the sync object
         sceGxmSyncObjectDestroy(data->displayBufferSync[i]);
     }
 
     // free the depth and stencil buffer
-    vgl_free(data->depthBufferData);
-    vgl_free(data->stencilBufferData);
+    vita_free(data->depthBufferData);
+    vita_free(data->stencilBufferData);
 
     // unregister programs and destroy shader patcher
     sceGxmShaderPatcherUnregisterProgram(data->shaderPatcher, data->textureFragmentProgramId);
@@ -567,23 +567,23 @@ void gxm_finish()
     sceGxmShaderPatcherUnregisterProgram(data->shaderPatcher, data->clearVertexProgramId);
 
     sceGxmShaderPatcherDestroy(data->shaderPatcher);
-    gpu_fragment_usse_free_mapped(data->patcherFragmentUsse);
-    gpu_vertex_usse_free_mapped(data->patcherVertexUsse);
-    vgl_free(data->patcherBuffer);
+    vita_gpu_fragment_usse_free_mapped(data->patcherFragmentUsse);
+    vita_gpu_vertex_usse_free_mapped(data->patcherVertexUsse);
+    vita_free(data->patcherBuffer);
 
     // destroy the render target
     sceGxmDestroyRenderTarget(data->renderTarget);
 
     // destroy the gxm context
     sceGxmDestroyContext(data->gxm_context);
-    gpu_fragment_usse_free_mapped(data->fragmentUsseRingBuffer);
-    vgl_free(data->fragmentRingBuffer);
-    vgl_free(data->vertexRingBuffer);
-    vgl_free(data->vdmRingBuffer);
+    vita_gpu_fragment_usse_free_mapped(data->fragmentUsseRingBuffer);
+    vita_free(data->fragmentRingBuffer);
+    vita_free(data->vertexRingBuffer);
+    vita_free(data->vdmRingBuffer);
     SDL_free(data->contextParams.hostMem);
-    vgl_free(data->screenVertices);
+    vita_free(data->screenVertices);
 
-    vgl_mem_term();
+    vita_mem_term();
 
     // terminate libgxm
     sceGxmTerminate();
@@ -595,9 +595,9 @@ void free_gxm_texture(gxm_texture *texture)
 {
     if (texture) {
         if (texture->palette) {
-            vgl_free(texture->palette);
+            vita_free(texture->palette);
         }
-        vgl_free(texture->data);
+        vita_free(texture->data);
 #ifdef VITA_HW_ACCEL
         notification_busy[texture->notification_id] = 0;
 #endif
@@ -650,7 +650,7 @@ gxm_texture* create_gxm_texture(unsigned int w, unsigned int h, SceGxmTextureFor
     const int tex_size =  ((w + 7) & ~ 7) * h * tex_format_to_bytespp(format);
 
     /* Allocate a GPU buffer for the texture */
-    texture->data = gpu_alloc_mapped_aligned(SCE_GXM_TEXTURE_ALIGNMENT, tex_size, textureMemBlockType);
+    texture->data = vita_gpu_alloc_mapped_aligned(SCE_GXM_TEXTURE_ALIGNMENT, tex_size, textureMemBlockType);
 
     if (!texture->data) {
         free(texture);
@@ -666,7 +666,7 @@ gxm_texture* create_gxm_texture(unsigned int w, unsigned int h, SceGxmTextureFor
     if ((format & 0x9f000000U) == SCE_GXM_TEXTURE_BASE_FORMAT_P8) {
         const int pal_size = 256 * sizeof(uint32_t);
 
-        texture->palette = gpu_alloc_mapped_aligned(SCE_GXM_PALETTE_ALIGNMENT, pal_size, VITA_MEM_VRAM);
+        texture->palette = vita_gpu_alloc_mapped_aligned(SCE_GXM_PALETTE_ALIGNMENT, pal_size, VITA_MEM_VRAM);
 
         if (!texture->palette) {
             free_gxm_texture(texture);
@@ -992,13 +992,13 @@ void gxm_minimal_init_for_common_dialog(void)
     initializeParams.displayQueueCallbackDataSize   = sizeof(VITA_GXM_DisplayData);
     initializeParams.parameterBufferSize            = SCE_GXM_DEFAULT_PARAMETER_BUFFER_SIZE;
     sceGxmInitialize(&initializeParams);
-    vgl_mem_init(0, 32 * 1024 * 1024, 0);
+    vita_mem_init(0, 32 * 1024 * 1024, 0);
 }
 
 void gxm_minimal_term_for_common_dialog(void)
 {
     sceGxmTerminate();
-    vgl_mem_term();
+    vita_mem_term();
 }
 
 void gxm_init_for_common_dialog(void)
@@ -1006,7 +1006,7 @@ void gxm_init_for_common_dialog(void)
     for (int i = 0; i < VITA_GXM_BUFFERS; i += 1)
     {
         buffer_for_common_dialog[i].displayData.vblank_wait = SDL_TRUE;
-        buffer_for_common_dialog[i].displayData.address = gpu_alloc_mapped_aligned(
+        buffer_for_common_dialog[i].displayData.address = vita_gpu_alloc_mapped_aligned(
             4096,
             4 * VITA_GXM_SCREEN_STRIDE * VITA_GXM_SCREEN_HEIGHT,
             use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
@@ -1054,7 +1054,7 @@ void gxm_term_for_common_dialog(void)
     sceGxmDisplayQueueFinish();
     for (int i = 0; i < VITA_GXM_BUFFERS; i += 1)
     {
-        vgl_free(buffer_for_common_dialog[i].displayData.address);
+        vita_free(buffer_for_common_dialog[i].displayData.address);
         sceGxmSyncObjectDestroy(buffer_for_common_dialog[i].sync);
     }
 }

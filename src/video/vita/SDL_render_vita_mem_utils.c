@@ -30,23 +30,19 @@
 
 #define RAM_ON_DEMAND
 
-// sometimes it's causing some kind of random memory corruption during python init in gemrb
-// not 100% sure if it's really caused by newlib mapping tho
-//#define MAP_NEWLIB_MEM
-
-static void *mempool_mspace[4] = {NULL, NULL, NULL, NULL}; // mspace creations (VRAM, RAM, PHYCONT RAM, EXTERNAL)
-static void *mempool_addr[4] = {NULL, NULL, NULL, NULL}; // addresses of heap memblocks (VRAM, RAM, PHYCONT RAM, EXTERNAL)
-static SceUID mempool_id[4] = {0, 0, 0, 0}; // UIDs of heap memblocks (VRAM, RAM, PHYCONT RAM, EXTERNAL)
-static size_t mempool_size[4] = {0, 0, 0, 0}; // sizes of heap memlbocks (VRAM, RAM, PHYCONT RAM, EXTERNAL)
+static void *mempool_mspace[3] = {NULL, NULL, NULL}; // mspace creations (VRAM, RAM, PHYCONT RAM)
+static void *mempool_addr[3] = {NULL, NULL, NULL}; // addresses of heap memblocks (VRAM, RAM, PHYCONT RAM)
+static SceUID mempool_id[3] = {0, 0, 0}; // UIDs of heap memblocks (VRAM, RAM, PHYCONT RAM)
+static size_t mempool_size[3] = {0, 0, 0}; // sizes of heap memlbocks (VRAM, RAM, PHYCONT RAM)
 
 static int mempool_initialized = 0;
 
 // VRAM usage setting
-uint8_t use_vram_for_usse = 1;
+uint8_t vram_for_usse = 1;
 
 
 #ifdef RAM_ON_DEMAND
-void *vgl_alloc_ram_block(uint32_t size, VitaMemType type) {
+void *vita_alloc_ram_block(uint32_t size, VitaMemType type) {
     size = ALIGN(size, 4 * 1024);
     SceUID blk = sceKernelAllocMemBlock("rw_mem_blk", type == VITA_MEM_RAM ? SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE : SCE_KERNEL_MEMBLOCK_TYPE_USER_RW, size, NULL);
 
@@ -61,11 +57,11 @@ void *vgl_alloc_ram_block(uint32_t size, VitaMemType type) {
 }
 #endif
 
-void vgl_mem_term(void) {
+void vita_mem_term(void) {
     if (!mempool_initialized)
         return;
 
-    for (int i = 0; i < VITA_MEM_EXTERNAL; i++) {
+    for (int i = 0; i < VITA_MEM_PHYCONT; i++) {
         if (!mempool_id[i])
             continue;
         sceClibMspaceDestroy(mempool_mspace[i]);
@@ -79,9 +75,9 @@ void vgl_mem_term(void) {
     mempool_initialized = 0;
 }
 
-void vgl_mem_init(size_t size_ram, size_t size_cdram, size_t size_phycont) {
+void vita_mem_init(size_t size_ram, size_t size_cdram, size_t size_phycont) {
     if (mempool_initialized)
-        vgl_mem_term();
+        vita_mem_term();
 
     if (size_ram > 0xC800000) // Vita limits memblocks size to a max of approx. 200 MBs apparently
         size_ram = 0xC800000;
@@ -99,7 +95,7 @@ void vgl_mem_init(size_t size_ram, size_t size_cdram, size_t size_phycont) {
     if (mempool_size[VITA_MEM_PHYCONT])
         mempool_id[VITA_MEM_PHYCONT] = sceKernelAllocMemBlock("phycont_mempool", SCE_KERNEL_MEMBLOCK_TYPE_USER_MAIN_PHYCONT_NC_RW, mempool_size[VITA_MEM_PHYCONT], NULL);
 
-    for (int i = 0; i < VITA_MEM_EXTERNAL; i++) {
+    for (int i = 0; i < VITA_MEM_PHYCONT; i++) {
         if (mempool_size[i]) {
             mempool_addr[i] = NULL;
             sceKernelGetMemBlockBase(mempool_id[i], &mempool_addr[i]);
@@ -121,24 +117,10 @@ void vgl_mem_init(size_t size_ram, size_t size_cdram, size_t size_phycont) {
     }
 #endif
 
-#ifdef MAP_NEWLIB_MEM
-    // Mapping newlib heap into sceGxm
-    void *dummy = malloc(1);
-    free(dummy);
-
-    SceKernelMemBlockInfo info;
-    info.size = sizeof(SceKernelMemBlockInfo);
-    int err = sceKernelGetMemBlockInfoByAddr(dummy, &info);
-    sceGxmMapMemory(info.mappedBase, info.mappedSize, SCE_GXM_MEMORY_ATTRIB_READ | SCE_GXM_MEMORY_ATTRIB_WRITE);
-
-    mempool_size[VITA_MEM_EXTERNAL] = info.mappedSize;
-    mempool_addr[VITA_MEM_EXTERNAL] = info.mappedBase;
-#endif
-
     mempool_initialized = 1;
 }
 
-VitaMemType vgl_mem_get_type_by_addr(void *addr) {
+VitaMemType vita_mem_get_type_by_addr(void *addr) {
     if (addr >= mempool_addr[VITA_MEM_VRAM] && (addr < mempool_addr[VITA_MEM_VRAM] + mempool_size[VITA_MEM_VRAM]))
         return VITA_MEM_VRAM;
     else if (addr >= mempool_addr[VITA_MEM_PHYCONT] && (addr < mempool_addr[VITA_MEM_PHYCONT] + mempool_size[VITA_MEM_PHYCONT]))
@@ -147,10 +129,6 @@ VitaMemType vgl_mem_get_type_by_addr(void *addr) {
     else if (addr >= mempool_addr[VITA_MEM_RAM] && (addr < mempool_addr[VITA_MEM_RAM] + mempool_size[VITA_MEM_RAM]))
         return VITA_MEM_RAM;
 #endif
-#ifdef MAP_NEWLIB_MEM
-    else if (addr >= mempool_addr[VITA_MEM_EXTERNAL] && (addr < mempool_addr[VITA_MEM_EXTERNAL] + mempool_size[VITA_MEM_EXTERNAL]))
-        return VITA_MEM_EXTERNAL;
-#endif
 #ifdef RAM_ON_DEMAND
     return VITA_MEM_RAM;
 #else
@@ -158,8 +136,8 @@ VitaMemType vgl_mem_get_type_by_addr(void *addr) {
 #endif
 }
 
-void vgl_free(void *ptr) {
-    VitaMemType type = vgl_mem_get_type_by_addr(ptr);
+void vita_free(void *ptr) {
+    VitaMemType type = vita_mem_get_type_by_addr(ptr);
     if (mempool_mspace[type])
         sceClibMspaceFree(mempool_mspace[type], ptr);
 #ifdef RAM_ON_DEMAND
@@ -168,66 +146,53 @@ void vgl_free(void *ptr) {
         sceKernelFreeMemBlock(sceKernelFindMemBlockByAddr(ptr, 0));
     }
 #endif
-#ifdef MAP_NEWLIB_MEM
-    else if (type == VITA_MEM_EXTERNAL)
-        free(ptr);
-#endif
 }
 
-void *vgl_memalign(size_t alignment, size_t size, VitaMemType type) {
+void *vita_memalign(size_t alignment, size_t size, VitaMemType type) {
     if (mempool_mspace[type])
         return sceClibMspaceMemalign(mempool_mspace[type], alignment, size);
 #ifdef RAM_ON_DEMAND
     else if (type == VITA_MEM_RAM || type == VITA_MEM_RAM_CACHED)
-        return vgl_alloc_ram_block(size, type);
-#endif
-#ifdef MAP_NEWLIB_MEM
-    else if (type == VITA_MEM_EXTERNAL)
-        return memalign(alignment, size);
+        return vita_alloc_ram_block(size, type);
 #endif
     return NULL;
 }
 
-void *gpu_alloc_mapped_aligned(size_t alignment, size_t size, VitaMemType type) {
+void *vita_gpu_alloc_mapped_aligned(size_t alignment, size_t size, VitaMemType type) {
 #ifndef RAM_ON_DEMAND
     if (type == VITA_MEM_RAM_CACHED) {
         type = VITA_MEM_RAM;
     }
 #endif
     // Allocating requested memblock
-    void *res = vgl_memalign(alignment, size, type);
+    void *res = vita_memalign(alignment, size, type);
     if (res)
         return res;
 
     if (type != VITA_MEM_PHYCONT) {
-        res = vgl_memalign(alignment, size, VITA_MEM_PHYCONT);
+        res = vita_memalign(alignment, size, VITA_MEM_PHYCONT);
         if (res)
             return res;
     }
 
     if (type != VITA_MEM_RAM) {
-        res = vgl_memalign(alignment, size, VITA_MEM_RAM);
+        res = vita_memalign(alignment, size, VITA_MEM_RAM);
         if (res)
             return res;
     }
 
     if (type != VITA_MEM_VRAM) {
-        res = vgl_memalign(alignment, size, VITA_MEM_VRAM);
+        res = vita_memalign(alignment, size, VITA_MEM_VRAM);
         if (res)
             return res;
     }
-#ifdef MAP_NEWLIB_MEM
-    if (type != VITA_MEM_EXTERNAL) {
-        // Internal mempool finished, using newlib mem
-        res = vgl_memalign(alignment, size, VITA_MEM_EXTERNAL);
-    }
-#endif
+
     return res;
 }
 
-void *gpu_vertex_usse_alloc_mapped(size_t size, unsigned int *usse_offset) {
+void *vita_gpu_vertex_usse_alloc_mapped(size_t size, unsigned int *usse_offset) {
     // Allocating memblock
-    void *addr = gpu_alloc_mapped_aligned(4096, size, use_vram_for_usse ? VITA_MEM_VRAM : VITA_MEM_RAM);
+    void *addr = vita_gpu_alloc_mapped_aligned(4096, size, vram_for_usse ? VITA_MEM_VRAM : VITA_MEM_RAM);
 
     // Mapping memblock into sceGxm as vertex USSE memory
     sceGxmMapVertexUsseMemory(addr, size, usse_offset);
@@ -236,12 +201,12 @@ void *gpu_vertex_usse_alloc_mapped(size_t size, unsigned int *usse_offset) {
     return addr;
 }
 
-void gpu_vertex_usse_free_mapped(void *addr) {
+void vita_gpu_vertex_usse_free_mapped(void *addr) {
     // Unmapping memblock from sceGxm as vertex USSE memory
     sceGxmUnmapVertexUsseMemory(addr);
 
 #ifdef RAM_ON_DEMAND
-    if (!use_vram_for_usse)
+    if (!vram_for_usse)
     {
         sceKernelFreeMemBlock(sceKernelFindMemBlockByAddr(addr, 0));
         return;
@@ -249,12 +214,12 @@ void gpu_vertex_usse_free_mapped(void *addr) {
 #endif
 
     // Deallocating memblock
-    vgl_free(addr);
+    vita_free(addr);
 }
 
-void *gpu_fragment_usse_alloc_mapped(size_t size, unsigned int *usse_offset) {
+void *vita_gpu_fragment_usse_alloc_mapped(size_t size, unsigned int *usse_offset) {
     // Allocating memblock
-    void *addr = gpu_alloc_mapped_aligned(4096, size, use_vram_for_usse ? VITA_MEM_VRAM : VITA_MEM_RAM);
+    void *addr = vita_gpu_alloc_mapped_aligned(4096, size, vram_for_usse ? VITA_MEM_VRAM : VITA_MEM_RAM);
 
     // Mapping memblock into sceGxm as fragment USSE memory
     sceGxmMapFragmentUsseMemory(addr, size, usse_offset);
@@ -263,12 +228,12 @@ void *gpu_fragment_usse_alloc_mapped(size_t size, unsigned int *usse_offset) {
     return addr;
 }
 
-void gpu_fragment_usse_free_mapped(void *addr) {
+void vita_gpu_fragment_usse_free_mapped(void *addr) {
     // Unmapping memblock from sceGxm as fragment USSE memory
     sceGxmUnmapFragmentUsseMemory(addr);
 
 #ifdef RAM_ON_DEMAND
-    if (!use_vram_for_usse)
+    if (!vram_for_usse)
     {
         sceKernelFreeMemBlock(sceKernelFindMemBlockByAddr(addr, 0));
         return;
@@ -276,5 +241,5 @@ void gpu_fragment_usse_free_mapped(void *addr) {
 #endif
 
     // Deallocating memblock
-    vgl_free(addr);
+    vita_free(addr);
 }
