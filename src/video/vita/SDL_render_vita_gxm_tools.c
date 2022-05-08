@@ -41,7 +41,7 @@ static VitaMemType textureMemBlockType = VITA_MEM_VRAM;
 volatile unsigned int *notificationMem;
 SceGxmNotification flipFragmentNotif;
 gxm_texture *lastScreenTexture = NULL;
-uint8_t use_vram = 1;
+uint8_t gxm_use_vram = 1;
 
 #ifdef VITA_HW_ACCEL
 #define NOTIF_NUM 512
@@ -168,9 +168,9 @@ int gxm_init()
     vita_mem_init(ram_size, cdram_size, phycont_size);
 
     // allocate ring buffer memory using default sizes
-    data->vdmRingBuffer = vita_gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_VDM_RING_BUFFER_SIZE, use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
-    data->vertexRingBuffer = vita_gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_VERTEX_RING_BUFFER_SIZE, use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
-    data->fragmentRingBuffer = vita_gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_FRAGMENT_RING_BUFFER_SIZE, use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
+    data->vdmRingBuffer = vita_gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_VDM_RING_BUFFER_SIZE, gxm_use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
+    data->vertexRingBuffer = vita_gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_VERTEX_RING_BUFFER_SIZE, gxm_use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
+    data->fragmentRingBuffer = vita_gpu_alloc_mapped_aligned(4096, SCE_GXM_DEFAULT_FRAGMENT_RING_BUFFER_SIZE, gxm_use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
 
     unsigned int fragmentUsseRingBufferOffset;
     data->fragmentUsseRingBuffer = vita_gpu_fragment_usse_alloc_mapped(SCE_GXM_DEFAULT_FRAGMENT_USSE_RING_BUFFER_SIZE, &fragmentUsseRingBufferOffset);
@@ -255,10 +255,10 @@ int gxm_init()
     unsigned int depthStrideInSamples = alignedWidth;
 
     // allocate the depth buffer
-    data->depthBufferData = vita_gpu_alloc_mapped_aligned(SCE_GXM_DEPTHSTENCIL_SURFACE_ALIGNMENT, 4 * sampleCount, use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
+    data->depthBufferData = vita_gpu_alloc_mapped_aligned(SCE_GXM_DEPTHSTENCIL_SURFACE_ALIGNMENT, 4 * sampleCount, gxm_use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
 
     // allocate the stencil buffer
-    data->stencilBufferData = vita_gpu_alloc_mapped_aligned(SCE_GXM_DEPTHSTENCIL_SURFACE_ALIGNMENT, 4 * sampleCount, use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
+    data->stencilBufferData = vita_gpu_alloc_mapped_aligned(SCE_GXM_DEPTHSTENCIL_SURFACE_ALIGNMENT, 4 * sampleCount, gxm_use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
 
     // create the SceGxmDepthStencilSurface structure
     err = sceGxmDepthStencilSurfaceInit(
@@ -288,7 +288,7 @@ int gxm_init()
     const unsigned int patcherFragmentUsseSize  = 64*1024;
 
     // allocate memory for buffers and USSE code
-    data->patcherBuffer = vita_gpu_alloc_mapped_aligned(4096, patcherBufferSize, use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
+    data->patcherBuffer = vita_gpu_alloc_mapped_aligned(4096, patcherBufferSize, gxm_use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
 
     unsigned int patcherVertexUsseOffset;
     data->patcherVertexUsse = vita_gpu_vertex_usse_alloc_mapped(patcherVertexUsseSize, &patcherVertexUsseOffset);
@@ -417,7 +417,7 @@ int gxm_init()
         }
 
         // create the clear triangle vertex/index data
-        data->clearVertices = (clear_vertex *)vita_gpu_alloc_mapped_aligned(4096, 3*sizeof(clear_vertex), use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
+        data->clearVertices = (clear_vertex *)vita_gpu_alloc_mapped_aligned(4096, 3*sizeof(clear_vertex), gxm_use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
 
         data->clearVertices[0].x = -1.0f;
         data->clearVertices[0].y = -1.0f;
@@ -430,7 +430,7 @@ int gxm_init()
     // Allocate a 4 * 2 bytes = 8 bytes buffer and store all possible
     // 16-bit indices in linear ascending order, so we can use this for
     // all drawing operations where we don't want to use indexing.
-    data->linearIndices = (uint16_t *)vita_gpu_alloc_mapped_aligned(sizeof(uint16_t), 4*sizeof(uint16_t), use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
+    data->linearIndices = (uint16_t *)vita_gpu_alloc_mapped_aligned(sizeof(uint16_t), 4*sizeof(uint16_t), gxm_use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
 
     for (uint16_t i = 0; i < 4; ++i)
     {
@@ -505,7 +505,7 @@ int gxm_init()
     data->clearClearColorParam = (SceGxmProgramParameter *)sceGxmProgramFindParameterByName(clearFragmentProgramGxp, "uClearColor");
 
     // Allocate memory for screen vertices
-    data->screenVertices = vita_gpu_alloc_mapped_aligned(sizeof(texture_vertex), 4*sizeof(texture_vertex), use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
+    data->screenVertices = vita_gpu_alloc_mapped_aligned(sizeof(texture_vertex), 4*sizeof(texture_vertex), gxm_use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
 
     init_orthographic_matrix(data->ortho_matrix, -1.0f, 1.0f, -1.0f, 1.0f, 0.0f, 1.0f);
 
@@ -858,8 +858,6 @@ void gxm_draw_screen_texture(gxm_texture *texture, int clear_required)
 
 #ifdef VITA_HW_ACCEL
 // what if locked texture is currently being read from..? probably still safer to use gxm_wait_rendering_done() for locking
-// also there's a possibility of more than 1 queued job that may result in fired up notification while there are still jobs left to do
-// rework of notification system or ensuring that jobs are finished before queuing new ones is probably a safer approach (and slower one)
 void gxm_lock_texture(gxm_texture *texture)
 {
     if (!notification_limit_reached) {
@@ -916,7 +914,17 @@ void gxm_fill_rect_transfer(gxm_texture *dst, SDL_Rect dstrect, uint32_t color)
 
     SceGxmTransferFormat transferFormat = gxm_texture_get_transferformat(dst);
 
-    *dst->fragment_notif.address = 0;
+    // change the notification value if the previous queued operation on the texture is not finished yet
+    // reset it back to 1 if it's finished
+    if (*dst->fragment_notif.address != dst->fragment_notif.value)
+    {
+        dst->fragment_notif.value++;
+    }
+    else
+    {
+        dst->fragment_notif.value = 1;
+        *dst->fragment_notif.address = 0;
+    }
 
     // sceGxmNotificationWait could lock in theory on failed sceGxmTransfer or sceGxmEndScene
     sceGxmTransferFill(color, 
@@ -945,7 +953,17 @@ void gxm_blit_transfer(gxm_texture *src, SDL_Rect srcrect, gxm_texture *dst, SDL
     SceGxmTransferFormat srcTransferFormat = gxm_texture_get_transferformat(src);
     SceGxmTransferFormat dstTransferFormat = gxm_texture_get_transferformat(dst);
 
-    *dst->fragment_notif.address = 0;
+    // change the notification value if the previous queued operation on the texture is not finished yet
+    // reset it back to 1 if it's finished
+    if (*dst->fragment_notif.address != dst->fragment_notif.value)
+    {
+        dst->fragment_notif.value++;
+    }
+    else
+    {
+        dst->fragment_notif.value = 1;
+        *dst->fragment_notif.address = 0;
+    }
 
     sceGxmTransferCopy(
         srcrect.w,
@@ -1009,7 +1027,7 @@ void gxm_init_for_common_dialog(void)
         buffer_for_common_dialog[i].displayData.address = vita_gpu_alloc_mapped_aligned(
             4096,
             4 * VITA_GXM_SCREEN_STRIDE * VITA_GXM_SCREEN_HEIGHT,
-            use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
+            gxm_use_vram ? VITA_MEM_VRAM : VITA_MEM_RAM);
 
         sceGxmColorSurfaceInit(
             &buffer_for_common_dialog[i].surf,

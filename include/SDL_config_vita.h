@@ -156,7 +156,6 @@ typedef unsigned int size_t;
 #define HAVE_TANF   1
 #define HAVE_SETJMP 1
 #define HAVE_NANOSLEEP  1
-/* #define HAVE_SYSCONF  1 */
 /* #define HAVE_SIGACTION    1 */
 
 /* VITA isn't that sophisticated */

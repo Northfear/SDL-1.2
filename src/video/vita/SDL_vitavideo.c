@@ -43,6 +43,7 @@ typedef struct private_hwdata {
     SDL_Rect dst;
 } private_hwdata;
 
+static int gxm_initialized = 0;
 static int vsync = 1;
 static int clear_required = 0;
 
@@ -61,12 +62,25 @@ static int VITA_LockHWSurface(_THIS, SDL_Surface *surface);
 static void VITA_UnlockHWSurface(_THIS, SDL_Surface *surface);
 static void VITA_FreeHWSurface(_THIS, SDL_Surface *surface);
 
+/* HW accelerated stuff */
 #ifdef VITA_HW_ACCEL
 static int VITA_FillHWRect(_THIS, SDL_Surface *dst, SDL_Rect *dstrect, Uint32 color);
 static int VITA_CheckHWBlit(_THIS, SDL_Surface *src, SDL_Surface *dst);
 static int VITA_HWAccelBlit(SDL_Surface *src, SDL_Rect *srcrect, SDL_Surface *dst, SDL_Rect *dstrect);
 static int VITA_SetHWAlpha(_THIS, SDL_Surface *surface, Uint8 alpha);
 static int VITA_SetHWColorKey(_THIS, SDL_Surface *src, Uint32 key);
+#endif
+
+/* OpenGL functions */
+#if SDL_VIDEO_OPENGL_VITAGL
+static int VITA_GL_Init(_THIS);
+static int VITA_GL_LoadLibrary(_THIS, const char *path);
+static void* VITA_GL_GetProcAddress(_THIS, const char *proc);
+static int VITA_GL_GetAttribute(_THIS, SDL_GLattr attrib, int* value);
+static int VITA_GL_MakeCurrent(_THIS);
+static void VITA_GL_SwapBuffers(_THIS);
+
+static int vgl_initialized = 0;
 #endif
 
 /* etc. */
@@ -118,6 +132,15 @@ static SDL_VideoDevice *VITA_CreateDevice(int devindex)
     device->SetHWColorKey = NULL;
     device->SetHWAlpha = NULL;
 #endif
+
+#if SDL_VIDEO_OPENGL_VITAGL
+    /* OpenGL support */
+    device->GL_LoadLibrary = VITA_GL_LoadLibrary;
+    device->GL_GetProcAddress = VITA_GL_GetProcAddress;
+    device->GL_GetAttribute = VITA_GL_GetAttribute;
+    device->GL_MakeCurrent = VITA_GL_MakeCurrent;
+    device->GL_SwapBuffers = VITA_GL_SwapBuffers;
+#endif
     device->LockHWSurface = VITA_LockHWSurface;
     device->UnlockHWSurface = VITA_UnlockHWSurface;
     device->FlipHWSurface = VITA_FlipHWSurface;
@@ -157,12 +180,6 @@ int VITA_VideoInit(_THIS, SDL_PixelFormat *vformat)
     this->info.blit_sw_CC = 0;
     this->info.blit_sw_A = 0;
     this->info.blit_fill = VITA_FILL_HW;
-
-    if (gxm_init() != 0)
-    {
-        return -1;
-    }
-    gxm_set_vblank_wait(vsync);
 
     vformat->BitsPerPixel = 16;
     vformat->BytesPerPixel = 2;
@@ -266,6 +283,32 @@ SDL_Surface *VITA_SetVideoMode(_THIS, SDL_Surface *current,
     current->w = width;
     current->h = height;
 
+#if SDL_VIDEO_OPENGL_VITAGL
+    if (flags & SDL_OPENGL)
+    {
+        // HW surfaces aren't supported with opengl
+        current->pixels = SDL_malloc(current->h * current->pitch);
+        SDL_memset(current->pixels, 0, current->h * current->pitch);
+
+        if (!VITA_GL_Init(this))
+        {
+            return NULL;
+        }
+
+        return current;
+    }
+#endif
+
+    if (!gxm_initialized)
+    {
+        if (gxm_init() != 0)
+        {
+            return NULL;
+        }
+        gxm_set_vblank_wait(vsync);
+        gxm_initialized = 1;
+    }
+
     // remove old texture first to avoid crashes during resolution change
     if(current->hwdata != NULL)
     {
@@ -297,6 +340,12 @@ SDL_Surface *VITA_SetVideoMode(_THIS, SDL_Surface *current,
 
 static int VITA_AllocHWSurface(_THIS, SDL_Surface *surface)
 {
+    // HW surfaces aren't supported with opengl
+    if (this->screen->flags & SDL_OPENGL == SDL_OPENGL)
+    {
+        return -1;
+    }
+
     surface->hwdata = (private_hwdata*) SDL_malloc (sizeof (private_hwdata));
     if (surface->hwdata == NULL)
     {
@@ -549,6 +598,134 @@ static int VITA_SetHWColorKey(_THIS, SDL_Surface *src, Uint32 key)
 }
 #endif
 
+#if SDL_VIDEO_OPENGL_VITAGL
+int VITA_GL_Init(_THIS)
+{
+    if (!vgl_initialized) {
+        this->gl_config.red_size = 8;
+        this->gl_config.green_size = 8;
+        this->gl_config.blue_size = 8;
+        this->gl_config.alpha_size = 8;
+        this->gl_config.depth_size = 32;
+        this->gl_config.stencil_size = 8;
+        this->gl_config.accelerated = 1;
+
+        enum SceGxmMultisampleMode gxm_ms;
+
+        switch (this->gl_config.multisamplesamples) { 
+            case 2:  gxm_ms = SCE_GXM_MULTISAMPLE_2X; break;
+            case 4:
+            case 8:
+            case 16: gxm_ms = SCE_GXM_MULTISAMPLE_4X; break;
+            default: gxm_ms = SCE_GXM_MULTISAMPLE_NONE; break;
+        }
+
+        vglInitExtended(0, SCREEN_W, SCREEN_H, MEMORY_VITAGL_THRESHOLD, gxm_ms);
+        vgl_initialized = 1;
+    }
+
+    return vgl_initialized;
+}
+
+int VITA_GL_LoadLibrary(_THIS, const char *path)
+{
+    this->gl_config.driver_loaded = 1;
+    return 0;
+}
+
+void* VITA_GL_GetProcAddress(_THIS, const char *proc)
+{
+    return vglGetProcAddress(proc);
+}
+
+int VITA_GL_GetAttribute(_THIS, SDL_GLattr attrib, int* value)
+{
+    switch (attrib)
+    {
+        case SDL_GL_RED_SIZE:
+            *value = this->gl_config.red_size;
+            break;
+        case SDL_GL_GREEN_SIZE:
+            *value = this->gl_config.green_size;
+            break;
+        case SDL_GL_BLUE_SIZE:
+            *value = this->gl_config.blue_size;
+            break;
+        case SDL_GL_ALPHA_SIZE:
+            *value = this->gl_config.alpha_size;
+            break;
+        case SDL_GL_DEPTH_SIZE:
+            *value = this->gl_config.depth_size;
+            break;
+        case SDL_GL_BUFFER_SIZE:
+            *value = this->gl_config.buffer_size;
+            break;
+        case SDL_GL_STENCIL_SIZE:
+            *value = this->gl_config.stencil_size;
+            break;
+        case SDL_GL_DOUBLEBUFFER:
+            *value = this->gl_config.buffer_size;
+            break;
+        case SDL_GL_ACCUM_RED_SIZE:
+            *value = this->gl_config.accum_red_size;
+            break;
+        case SDL_GL_ACCUM_GREEN_SIZE:
+            *value = this->gl_config.accum_green_size;
+            break;
+        case SDL_GL_ACCUM_BLUE_SIZE:
+            *value = this->gl_config.accum_blue_size;
+            break;
+        case SDL_GL_ACCUM_ALPHA_SIZE:
+            *value = this->gl_config.accum_alpha_size;
+            break;
+        case SDL_GL_STEREO:
+            *value = this->gl_config.stereo;
+            break;
+        case SDL_GL_MULTISAMPLEBUFFERS:
+            *value = this->gl_config.multisamplebuffers;
+            break;
+        case SDL_GL_MULTISAMPLESAMPLES:
+            *value = this->gl_config.multisamplesamples;
+            break;
+        case SDL_GL_ACCELERATED_VISUAL:
+            *value = this->gl_config.accelerated;
+            break;
+        case SDL_GL_SWAP_CONTROL:
+            *value = this->gl_config.swap_control;
+            break;
+        default:
+            *value = 0;
+            return 0;
+    }
+    return 0;
+}
+
+int VITA_GL_MakeCurrent(_THIS)
+{
+    if (!vgl_initialized) {
+        SDL_SetError("vitaGL is not initialized");
+        return -1;
+    }
+
+    glFinish();
+    glClearColor(0.f, 0.f, 0.f, 0.f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    glFinish();
+
+    return 0;
+}
+
+void VITA_GL_SwapBuffers(_THIS)
+{
+    if (!vgl_initialized) {
+        SDL_SetError("vitaGL is not initialized");
+        return;
+    }
+
+    vglSwapBuffers(GL_TRUE);
+}
+#endif
+
 static void VITA_UpdateRects(_THIS, int numrects, SDL_Rect *rects)
 {
 }
@@ -569,7 +746,21 @@ void VITA_VideoQuit(_THIS)
     {
         VITA_FreeHWSurface(this, this->screen);
     }
-    gxm_finish();
+
+    if (gxm_initialized)
+    {
+        gxm_finish();
+        gxm_initialized = 0;
+    }
+
+#if SDL_VIDEO_OPENGL_VITAGL
+    if (vgl_initialized)
+    {
+        vglEnd();
+        vgl_initialized = 0;
+    }
+    this->gl_config.driver_loaded = 0;
+#endif
 }
 
 // custom vita function for centering/scaling main screen surface (texture)

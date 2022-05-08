@@ -28,6 +28,12 @@
 
 #include "SDL_render_vita_gxm_types.h"
 
+#if SDL_VIDEO_OPENGL_VITAGL
+#include "vitaGL.h"
+
+#define MEMORY_VITAGL_THRESHOLD 12 * 1024 * 1024
+#endif
+
 /* Hidden "this" pointer for the video functions */
 #define _THIS	SDL_VideoDevice *this
 

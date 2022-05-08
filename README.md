@@ -26,6 +26,10 @@ You can disable individual hardware accelerated functions by using the following
 
 `VITA_FILL_HW=0` Disables accelerated fills.
 
+To enable support of `SDL_GL` functions via `vitaGL` - use `SDL_VITAGL=1` flag during the build.
+
+OpenGL support is pretty much untested, so YMMW.
+
 ## Custom functions
 
 This SDL 1.2 port contains few custom functions that extend its functionality and allow some fine-tuning.

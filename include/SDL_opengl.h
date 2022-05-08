@@ -42,6 +42,24 @@
 #elif defined(__MACOS__)
 #include <gl.h>         /* Header File For The OpenGL Library */
 #include <glu.h>        /* Header File For The GLU Library */
+#elif defined(__VITA__)
+#include "vitaGL.h"
+
+#define GL_ARB_imaging
+#define GL_VERSION_1_2
+#define GL_VERSION_1_3
+#define GL_VERSION_1_4
+#define GL_VERSION_1_5
+#define GL_VERSION_2_0
+#define GL_VERSION_2_1
+#define GL_ARB_vertex_program
+#define GL_EXT_abgr
+#define GL_EXT_paletted_texture
+#define GL_WIN_phong_shading
+#define GL_EXT_texture_filter_anisotropic
+#define GL_EXT_texture_compression_s3tc
+#define GL_EXT_texture_mirror_clamp
+#define GL_UNPACK_ROW_LENGTH			0x0CF2
 #else
 #include <GL/gl.h>      /* Header File For The OpenGL Library */
 #include <GL/glu.h>     /* Header File For The GLU Library */
