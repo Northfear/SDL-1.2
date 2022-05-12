@@ -1,0 +1,14 @@
+# sdl pkg-config source file
+
+prefix=/usr/local/vitasdk/arm-vita-eabi
+exec_prefix=${prefix}
+libdir=/usr/local/vitasdk/arm-vita-eabi/lib
+includedir=/usr/local/vitasdk/arm-vita-eabi/include
+
+Name: sdl
+Description: Simple DirectMedia Layer is a cross-platform multimedia library designed to provide low level access to audio, keyboard, mouse, joystick, 3D hardware via OpenGL, and 2D video framebuffer.
+Version: 1.2.16
+Requires:
+Conflicts:
+Libs: -L${libdir}   -lSDL -Wl,--no-undefined  -lSceGxm_stub -lSceDisplay_stub -lSceCtrl_stub -lSceAppMgr_stub -lSceAudio_stub -lSceIofilemgr_stub -lSceCommonDialog_stub -lSceTouch_stub -lSceHid_stub -lSceMotion_stub -lScePower_stub -lSceProcessmgr_stub -lm
+Cflags: -I${includedir}/SDL
