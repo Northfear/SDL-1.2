@@ -78,7 +78,9 @@ install: $(TARGET)
 	@cp  $(TARGET) $(DESTDIR)$(VITASDK)/arm-vita-eabi/lib
 	@mkdir -p "$(DESTDIR)$(VITASDK)/arm-vita-eabi/include/SDL"
 	@cp include/*.h "$(DESTDIR)$(VITASDK)/arm-vita-eabi/include/SDL"
+	@mkdir -p "$(DESTDIR)$(VITASDK)/arm-vita-eabi/lib/pkgconfig/"
 	install -m 644 sdl.pc.vita "$(DESTDIR)$(VITASDK)/arm-vita-eabi/lib/pkgconfig/sdl.pc"
+	@mkdir -p "$(DESTDIR)$(VITASDK)/arm-vita-eabi/bin/"
 	install -m 755 sdl-config.vita "$(DESTDIR)$(VITASDK)/arm-vita-eabi/bin/sdl-config"
 	@echo "Installed!"
 
