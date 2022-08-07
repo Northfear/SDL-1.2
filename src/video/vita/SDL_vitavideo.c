@@ -341,7 +341,7 @@ SDL_Surface *VITA_SetVideoMode(_THIS, SDL_Surface *current,
 static int VITA_AllocHWSurface(_THIS, SDL_Surface *surface)
 {
     // HW surfaces aren't supported with opengl
-    if (this->screen->flags & SDL_OPENGL == SDL_OPENGL)
+    if (this->screen && this->screen->flags & SDL_OPENGL == SDL_OPENGL)
     {
         return -1;
     }

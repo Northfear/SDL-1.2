@@ -5,7 +5,7 @@ CFLAGS  = -O3 -mcpu=cortex-a9 -mfpu=neon \
 $(INCLUDE) -lSceLibc_stub -Werror \
 -Dmemcpy=sceClibMemcpy -Dmemset=sceClibMemset -Dmemmove=sceClibMemmove -Dmemcmp=sceClibMemcmp
 
-HW_FLAGS = -DVITA_HW_ACCEL 
+HW_FLAGS = -DVITA_HW_ACCEL
 
 ifeq ($(VITA_HW_ACCEL),0)
 HW_FLAGS =
