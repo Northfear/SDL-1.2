@@ -40,7 +40,6 @@
 
 typedef struct private_hwdata {
     gxm_texture *texture;
-    SDL_Rect dst;
 } private_hwdata;
 
 static int gxm_initialized = 0;
@@ -317,12 +316,18 @@ SDL_Surface *VITA_SetVideoMode(_THIS, SDL_Surface *current,
 
     VITA_AllocHWSurface(this, current);
 
+    // set initial texture destination
+    this->hidden->dst.x = 0;
+    this->hidden->dst.y = 0;
+    this->hidden->dst.w = width;
+    this->hidden->dst.h = height;
+
     // clear and center non-fullscreen screen surfaces by default
     if (width != SCREEN_W || height != SCREEN_H)
     {
         clear_required = 1;
-        current->hwdata->dst.x = (SCREEN_W - width) / 2;
-        current->hwdata->dst.y = (SCREEN_H - height) / 2;
+        this->hidden->dst.x = (SCREEN_W - width) / 2;
+        this->hidden->dst.y = (SCREEN_H - height) / 2;
     }
     else
     {
@@ -331,9 +336,9 @@ SDL_Surface *VITA_SetVideoMode(_THIS, SDL_Surface *current,
 
     gxm_init_texture_scale(
         current->hwdata->texture,
-        current->hwdata->dst.x, current->hwdata->dst.y,
-        (float)current->hwdata->dst.w/(float)current->w,
-        (float)current->hwdata->dst.h/(float)current->h);
+        this->hidden->dst.x, this->hidden->dst.y,
+        (float)this->hidden->dst.w/(float)current->w,
+        (float)this->hidden->dst.h/(float)current->h);
 
     return(current);
 }
@@ -353,12 +358,6 @@ static int VITA_AllocHWSurface(_THIS, SDL_Surface *surface)
         return -1;
     }
     SDL_memset (surface->hwdata, 0, sizeof(private_hwdata));
-
-    // set initial texture destination
-    surface->hwdata->dst.x = 0;
-    surface->hwdata->dst.y = 0;
-    surface->hwdata->dst.w = surface->w;
-    surface->hwdata->dst.h = surface->h;
 
     switch(surface->format->BitsPerPixel)
     {
@@ -770,16 +769,16 @@ void SDL_VITA_SetVideoModeScaling(int x, int y, float w, float h)
 
     if (surface != NULL && surface->hwdata != NULL)
     {
-        surface->hwdata->dst.x = x;
-        surface->hwdata->dst.y = y;
-        surface->hwdata->dst.w = w;
-        surface->hwdata->dst.h = h;
+        current_video->hidden->dst.x = x;
+        current_video->hidden->dst.y = y;
+        current_video->hidden->dst.w = w;
+        current_video->hidden->dst.h = h;
 
         gxm_init_texture_scale(
             surface->hwdata->texture,
-            surface->hwdata->dst.x, surface->hwdata->dst.y,
-            (float)surface->hwdata->dst.w/(float)surface->w,
-            (float)surface->hwdata->dst.h/(float)surface->h);
+            current_video->hidden->dst.x, current_video->hidden->dst.y,
+            (float)current_video->hidden->dst.w/(float)surface->w,
+            (float)current_video->hidden->dst.h/(float)surface->h);
 
         if (w != SCREEN_W || h != SCREEN_H)
             clear_required = 1;
@@ -847,6 +846,6 @@ void SDL_VITA_GetSurfaceRect(SDL_Rect *surfaceRect, SDL_Rect *scaledRect)
         surfaceRect->y = 0;
         surfaceRect->w = surface->w;
         surfaceRect->h = surface->h;
-        *scaledRect = surface->hwdata->dst;
+        *scaledRect = current_video->hidden->dst;
     }
 }

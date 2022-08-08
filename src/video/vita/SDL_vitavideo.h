@@ -45,7 +45,7 @@ void SDL_VITA_GetSurfaceRect(SDL_Rect *surfaceRect, SDL_Rect *scaledRect);
 /* Private display data */
 
 struct SDL_PrivateVideoData {
-	gxm_texture *texture;
+    SDL_Rect dst;
 };
 
 #endif /* _SDL_vitavideo_h */
