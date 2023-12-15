@@ -64,8 +64,10 @@ static const Uint8 mode_bpp[]={
 
 /*--- Variables ---*/
 
+#ifndef CTPCI_USE_TABLE
 static int enum_actually_add;
 static SDL_VideoDevice *enum_this;
+#endif
 
 /*--- Functions ---*/
 
@@ -93,6 +95,7 @@ void SDL_XBIOS_VideoInit_Ctpci(_THIS)
 	this->FlipHWSurface = flipHWSurface;
 }
 
+#ifndef CTPCI_USE_TABLE
 static unsigned long /*cdecl*/ enumfunc(SCREENINFO *inf, unsigned long flag)
 {
 	xbiosmode_t modeinfo;
@@ -107,6 +110,7 @@ static unsigned long /*cdecl*/ enumfunc(SCREENINFO *inf, unsigned long flag)
 
 	return ENUMMODE_CONT;
 }
+#endif
 
 static void listModes(_THIS, int actually_add)
 {
@@ -155,6 +159,8 @@ static void saveMode(_THIS, SDL_PixelFormat *vformat)
 	this->info.current_w = si.scrWidth;
 	this->info.current_h = si.scrHeight;
 
+	XBIOS_oldvbase = (void*)si.frameadr;
+
 	vformat->BitsPerPixel = si.scrPlanes;
 
 	XBIOS_oldnumcol = 0;
@@ -183,8 +189,8 @@ static void setMode(_THIS, xbiosmode_t *new_video_mode)
 
 static void restoreMode(_THIS)
 {
-	VsetScreen(-1, &XBIOS_oldvbase, VN_MAGIC, CMD_SETADR);
-	VsetScreen(-1, &XBIOS_oldvmode, VN_MAGIC, CMD_SETMODE);
+	VsetScreen(-1, XBIOS_oldvbase, VN_MAGIC, CMD_SETADR);
+	VsetScreen(-1, XBIOS_oldvmode, VN_MAGIC, CMD_SETMODE);
 	if (XBIOS_oldnumcol) {
 		VsetRGB(0, XBIOS_oldnumcol, XBIOS_oldpalette);
 	}
@@ -216,7 +222,7 @@ static int allocVbuffers(_THIS, int num_buffers, int bufsize)
 			/* Buffer 0 is current screen */
 			XBIOS_screensmem[i] = XBIOS_oldvbase;
 		} else {
-			VsetScreen(-1, &XBIOS_screensmem[i], VN_MAGIC, CMD_ALLOCPAGE);
+			VsetScreen(&XBIOS_screensmem[i], XBIOS_current, VN_MAGIC, CMD_ALLOCPAGE);
 		}
 
 		if (!XBIOS_screensmem[i]) {
